@@ -287,6 +287,9 @@ impl Workspace {
                     size,
                 }
             }
+            Loaded::TooLarge(n) => TabContent::Notice(
+                format!("This file is {} MB, too large to open.", n / (1024 * 1024)).into(),
+            ),
             Loaded::Error(e) => TabContent::Notice(format!("Could not read the file: {e}").into()),
         }
     }

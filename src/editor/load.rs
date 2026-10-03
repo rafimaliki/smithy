@@ -5,10 +5,15 @@ use std::path::Path;
 // ponytail: the whole file is still read into memory; upgrade: hold only the
 // visible lines, as the large-file screen describes.
 pub const LARGE_FILE_BYTES: u64 = 2 * 1024 * 1024;
+/// Above this a file is not loaded at all: a 'light' editor must not pull a
+/// multi-gigabyte file into memory. The read-only path above still applies
+/// to anything between the two limits.
+pub const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 pub enum Loaded {
     Text { text: String, read_only: bool },
     Binary,
+    TooLarge(u64),
     Error(String),
 }
 
@@ -17,6 +22,9 @@ pub fn load(path: &Path) -> Loaded {
         Ok(m) => m.len(),
         Err(e) => return Loaded::Error(e.to_string()),
     };
+    if size > MAX_FILE_BYTES {
+        return Loaded::TooLarge(size);
+    }
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
         Err(e) => return Loaded::Error(e.to_string()),
@@ -62,6 +70,28 @@ mod tests {
         ));
         let _ = std::fs::remove_file(b);
         let _ = std::fs::remove_file(t);
+    }
+
+    #[test]
+    fn the_read_only_limit_and_the_hard_cap_hold() {
+        let large = tmp("large", &vec![b'a'; LARGE_FILE_BYTES as usize + 1]);
+        assert!(matches!(
+            load(&large),
+            Loaded::Text {
+                read_only: true,
+                ..
+            }
+        ));
+        let _ = std::fs::remove_file(&large);
+
+        // Over the cap the size is all that is read; the file stays on disk.
+        let huge = tmp("huge", b"");
+        std::fs::File::create(&huge)
+            .unwrap()
+            .set_len(MAX_FILE_BYTES + 1)
+            .unwrap();
+        assert!(matches!(load(&huge), Loaded::TooLarge(n) if n == MAX_FILE_BYTES + 1));
+        let _ = std::fs::remove_file(&huge);
     }
 
     #[test]
