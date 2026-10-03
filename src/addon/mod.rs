@@ -10,6 +10,7 @@
 mod deps;
 pub mod image_viewer;
 pub mod markdown;
+pub mod pdf;
 mod registry;
 
 pub use deps::{resolve_disable, resolve_enable};
@@ -82,5 +83,6 @@ pub fn all() -> Vec<Box<dyn Addon>> {
     vec![
         Box::new(image_viewer::ImageViewer),
         Box::new(markdown::Markdown),
+        Box::new(pdf::PdfViewer),
     ]
 }

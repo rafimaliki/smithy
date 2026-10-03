@@ -4931,7 +4931,9 @@ checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 name = "smithy"
 version = "0.1.0"
 dependencies = [
+ "async-channel 2.5.0",
  "gpui",
+ "image",
  "pulldown-cmark",
  "ropey",
  "serde",
@@ -4958,6 +4960,7 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-xml",
  "tree-sitter-yaml",
+ "windows 0.57.0",
 ]
 
 [[package]]
