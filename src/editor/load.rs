@@ -1,9 +1,13 @@
 //! Reading a file for the editor: large and binary file guard.
 use std::path::Path;
 
-/// Above this a file opens read-only (and, later, without highlighting).
+/// Above this a file opens read-only, without highlighting, to save memory.
+// ponytail: the whole file is still read into memory; upgrade: hold only the
+// visible lines, as the large-file screen describes.
 pub const LARGE_FILE_BYTES: u64 = 2 * 1024 * 1024;
-/// Above this a file is not loaded at all.
+/// Above this a file is not loaded at all: a 'light' editor must not pull a
+/// multi-gigabyte file into memory. The read-only path above still applies
+/// to anything between the two limits.
 pub const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 pub enum Loaded {
@@ -66,6 +70,28 @@ mod tests {
         ));
         let _ = std::fs::remove_file(b);
         let _ = std::fs::remove_file(t);
+    }
+
+    #[test]
+    fn the_read_only_limit_and_the_hard_cap_hold() {
+        let large = tmp("large", &vec![b'a'; LARGE_FILE_BYTES as usize + 1]);
+        assert!(matches!(
+            load(&large),
+            Loaded::Text {
+                read_only: true,
+                ..
+            }
+        ));
+        let _ = std::fs::remove_file(&large);
+
+        // Over the cap the size is all that is read; the file stays on disk.
+        let huge = tmp("huge", b"");
+        std::fs::File::create(&huge)
+            .unwrap()
+            .set_len(MAX_FILE_BYTES + 1)
+            .unwrap();
+        assert!(matches!(load(&huge), Loaded::TooLarge(n) if n == MAX_FILE_BYTES + 1));
+        let _ = std::fs::remove_file(&huge);
     }
 
     #[test]

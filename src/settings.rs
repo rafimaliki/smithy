@@ -18,6 +18,9 @@ pub struct Settings {
     pub addons: Vec<String>,
     /// Most recent first, capped at `MAX_RECENT`.
     pub recent: Vec<PathBuf>,
+    /// GitHub account login from the last successful Connect. The token itself
+    /// is only ever in the Windows Credential Manager.
+    pub github_login: String,
     /// Action name -> keystroke override, e.g. "ToggleSidebar" -> "ctrl-b".
     pub shortcuts: Vec<(String, String)>,
 }
@@ -40,6 +43,7 @@ impl Default for Settings {
             diff_layout: "inline".into(),
             addons: Vec::new(),
             recent: Vec::new(),
+            github_login: String::new(),
             shortcuts: Vec::new(),
         }
     }
