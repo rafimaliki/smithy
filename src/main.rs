@@ -2,6 +2,7 @@ mod actions;
 mod addon;
 mod app;
 mod editor;
+mod git;
 mod keymap;
 mod settings;
 mod theme;
