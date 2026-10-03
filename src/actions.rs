@@ -31,6 +31,11 @@ actions!(
         Find,
         ToggleBlame,
         ToggleWrap,
+        // Answered by the Language servers add-on; they do nothing while it is off.
+        GoToDefinition,
+        FindReferences,
+        NavBack,
+        NavForward,
         // workspace
         ToggleSidebar,
         OpenFolder,

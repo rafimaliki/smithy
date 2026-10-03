@@ -158,9 +158,9 @@ impl EditorView {
         self.clamp_scroll_x(width);
     }
 
-    /// Place the caret on the clicked row; with wrap on that is a slice of its
-    /// logical line, so the column is measured inside the slice.
-    pub(super) fn click(&mut self, row: Row, x: Pixels, extend: bool, cx: &mut Context<Self>) {
+    /// The buffer column a click at `x` on `row` lands on; with wrap on the row
+    /// is a slice of its logical line, so the column is measured inside the slice.
+    pub(super) fn col_at(&self, row: Row, x: Pixels) -> usize {
         let rel = f32::from(x - self.bounds.left()) - GUTTER + self.scroll_x;
         let vcol = (rel / self.char_w + 0.5).max(0.0) as usize;
         let text = self.state.buffer.line(row.line);
@@ -169,7 +169,12 @@ impl EditorView {
             .skip(row.start)
             .take(row.end - row.start)
             .collect();
-        let col = row.start + col_at_visual(&slice, vcol);
+        row.start + col_at_visual(&slice, vcol)
+    }
+
+    /// Place the caret on the clicked row.
+    pub(super) fn click(&mut self, row: Row, x: Pixels, extend: bool, cx: &mut Context<Self>) {
+        let col = self.col_at(row, x);
         self.state.set_cursor_line_col(row.line, col, extend);
         cx.notify();
     }

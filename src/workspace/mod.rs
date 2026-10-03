@@ -22,7 +22,7 @@ pub(crate) mod watch;
 use crate::addon::{AddonContext, Registry};
 use crate::editor::load::{self, Loaded};
 use crate::editor::state::EditorState;
-use crate::editor::view::EditorView;
+use crate::editor::view::{EditorEvent, EditorView};
 use crate::settings::{Settings, SIDEBAR_MAX, SIDEBAR_MIN};
 use crate::tree::view::{TreeEvent, TreeView};
 use gpui::AppContext as _;
@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use tab_set::TabSet;
 
 pub enum TabContent {
-    Editor(Entity<EditorView>, #[allow(dead_code)] Subscription),
+    Editor(Entity<EditorView>, #[allow(dead_code)] Vec<Subscription>),
     Viewer(AnyView),
     /// An add-on's own view, e.g. the source-control diff.
     Addon {
@@ -341,7 +341,11 @@ impl Workspace {
                     view
                 });
                 let sub = cx.observe(&editor, |_, _, cx| cx.notify());
-                TabContent::Editor(editor, sub)
+                let nav =
+                    cx.subscribe_in(&editor, window, |this, _, e: &EditorEvent, window, cx| {
+                        this.on_editor_navigate(e, window, cx)
+                    });
+                TabContent::Editor(editor, vec![sub, nav])
             }
             Loaded::Binary => {
                 let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
