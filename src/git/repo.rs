@@ -41,6 +41,16 @@ impl Repo {
         &self.root
     }
 
+    /// The URL of a named remote, if it exists.
+    pub fn remote_url(&self, name: &str) -> Option<String> {
+        self.inner
+            .find_remote(name)
+            .ok()?
+            .url()
+            .ok()
+            .map(str::to_string)
+    }
+
     /// Current branch shorthand, or "HEAD" when detached.
     pub fn branch(&self) -> String {
         match self.inner.head() {
@@ -124,9 +134,12 @@ impl Repo {
         let merge_base = self.inner.merge_base(base_oid, head)?;
         let base_tree = self.inner.find_commit(merge_base)?.tree()?;
         let head_tree = self.inner.find_commit(head)?.tree()?;
+        // Ahead of `base` means commits reachable from the branch being
+        // reviewed and not from the base: swap the arguments so `ahead` counts
+        // this branch's own commits, not the base's.
         let commits = self
             .inner
-            .graph_ahead_behind(base_oid, head)
+            .graph_ahead_behind(head, base_oid)
             .map(|(ahead, _)| ahead)
             .unwrap_or(0);
         let mut opts = diff_options(None);
@@ -217,7 +230,7 @@ fn unstaged_char(s: Status) -> Option<char> {
     }
 }
 
-fn diff_options(rel: Option<&str>) -> DiffOptions {
+pub(crate) fn diff_options(rel: Option<&str>) -> DiffOptions {
     let mut opts = DiffOptions::new();
     opts.context_lines(3).interhunk_lines(0);
     opts.include_untracked(true)
@@ -229,7 +242,7 @@ fn diff_options(rel: Option<&str>) -> DiffOptions {
     opts
 }
 
-fn to_file_diff(diff: &Diff<'_>, i: usize, delta: git2::DiffDelta<'_>) -> FileDiff {
+pub(crate) fn to_file_diff(diff: &Diff<'_>, i: usize, delta: git2::DiffDelta<'_>) -> FileDiff {
     let rel = delta
         .new_file()
         .path()
@@ -293,5 +306,70 @@ fn empty_diff(rel: &str) -> FileDiff {
         dir,
         binary: false,
         hunks: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use git2::Signature;
+    use std::fs;
+
+    fn scratch(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("smithy-compare-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    /// Commit `text` as `file` on top of `parent`, without moving any branch.
+    fn commit(
+        repo: &Repository,
+        file: &str,
+        text: &str,
+        parent: Option<&git2::Commit>,
+    ) -> git2::Oid {
+        fs::write(repo.workdir().unwrap().join(file), text).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(file)).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+        let parents: Vec<&git2::Commit> = parent.into_iter().collect();
+        repo.commit(None, &sig, &sig, "msg", &tree, &parents)
+            .unwrap()
+    }
+
+    /// The count is the branch's own commits, not the base's: with the base one
+    /// commit ahead of the merge base and the branch two, `compare` says two.
+    #[test]
+    fn compare_counts_the_current_branchs_commits() {
+        let root = scratch("counts");
+        let repo = Repository::init(&root).unwrap();
+        let base = commit(&repo, "a.txt", "one\n", None);
+        let base_c = repo.find_commit(base).unwrap();
+        // The base moved on its own.
+        let main_tip = commit(&repo, "a.txt", "one\nmain\n", Some(&base_c));
+        // The branch under review has two commits.
+        let f1 = commit(&repo, "a.txt", "one\ntwo\n", Some(&base_c));
+        let f2 = commit(
+            &repo,
+            "b.txt",
+            "three\n",
+            Some(&repo.find_commit(f1).unwrap()),
+        );
+        repo.branch("main", &repo.find_commit(main_tip).unwrap(), true)
+            .unwrap();
+        repo.branch("feature", &repo.find_commit(f2).unwrap(), true)
+            .unwrap();
+        repo.set_head("refs/heads/feature").unwrap();
+
+        let compare = Repo::discover(&root).unwrap().compare("main").unwrap();
+        assert_eq!(compare.commits, 2);
+        assert_eq!(compare.files.len(), 2);
+        assert_eq!(compare.added(), 2);
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

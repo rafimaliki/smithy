@@ -11,6 +11,7 @@ pub enum SettingsSection {
     Addons,
     Shortcuts,
     Languages,
+    Github,
 }
 
 const NAV: &[(SettingsSection, &str)] = &[
@@ -18,6 +19,7 @@ const NAV: &[(SettingsSection, &str)] = &[
     (SettingsSection::Addons, "Add-ons"),
     (SettingsSection::Shortcuts, "Keyboard shortcuts"),
     (SettingsSection::Languages, "Languages"),
+    (SettingsSection::Github, "GitHub"),
 ];
 
 fn chip(id: impl Into<gpui::ElementId>, label: &str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
@@ -114,6 +116,9 @@ impl Workspace {
                     .child("SETTINGS"),
             );
         for (section, label) in NAV {
+            if *section == SettingsSection::Github && self.github_settings.is_none() {
+                continue;
+            }
             let on = self.settings_section == *section;
             nav =
                 nav.child(
@@ -144,6 +149,10 @@ impl Workspace {
             SettingsSection::Addons => self.addons_section(t, cx),
             SettingsSection::Shortcuts => self.shortcuts_section(t, cx),
             SettingsSection::Languages => self.languages_section(t, cx),
+            SettingsSection::Github => match &self.github_settings {
+                Some(view) => div().child(view.clone()).into_any_element(),
+                None => div().into_any_element(),
+            },
         }
     }
 
