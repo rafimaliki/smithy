@@ -115,8 +115,14 @@ pub fn delete(path: &Path) -> Result<(), String> {
 }
 
 /// Copy a file, or a folder and everything in it.
+// ponytail: a folder symlink or junction inside the tree is skipped, not copied;
+// upgrade: recreate the link at the destination.
 fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
-    if from.is_dir() {
+    let kind = std::fs::symlink_metadata(from)?.file_type();
+    if kind.is_symlink() && from.is_dir() {
+        return Ok(());
+    }
+    if kind.is_dir() {
         std::fs::create_dir_all(to)?;
         for entry in std::fs::read_dir(from)? {
             let entry = entry?;
@@ -148,6 +154,12 @@ pub fn paste(from: &Path, into: &Path, cut: bool) -> io::Result<PathBuf> {
     let name = from
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "nothing to paste"))?;
+    if from.is_dir() && is_inside(into, from) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "A folder cannot be pasted into itself.",
+        ));
+    }
     let target = unique_child(into, &name.to_string_lossy());
     if cut {
         move_entry(from, &target)?;
@@ -155,6 +167,13 @@ pub fn paste(from: &Path, into: &Path, cut: bool) -> io::Result<PathBuf> {
         copy_entry(from, &target)?;
     }
     Ok(target)
+}
+
+/// Whether `path` is `folder` or lies below it, compared on resolved paths so
+/// case and `..` do not hide it.
+fn is_inside(path: &Path, folder: &Path) -> bool {
+    let resolve = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    resolve(path).starts_with(resolve(folder))
 }
 
 /// `path` below `root`, with forward slashes (what Copy relative path copies).
@@ -183,6 +202,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_folder_cannot_be_pasted_into_itself_or_below_itself() {
+        let dir = tmp("paste-self");
+        let folder = dir.join("a");
+        std::fs::create_dir_all(folder.join("b")).unwrap();
+        std::fs::write(folder.join("f.txt"), "x").unwrap();
+        for cut in [false, true] {
+            assert!(paste(&folder, &folder, cut).is_err());
+            assert!(paste(&folder, &folder.join("b"), cut).is_err());
+        }
+        // Nothing was created, and the folder is untouched.
+        assert!(!folder.join("a").exists() && !folder.join("b").join("a").exists());
+        assert!(folder.join("f.txt").exists());
+        // Next to itself is fine: it becomes "a 2".
+        let copy = paste(&folder, &dir, false).unwrap();
+        assert_eq!(copy, dir.join("a 2"));
+        assert!(copy.join("f.txt").exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
