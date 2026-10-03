@@ -29,6 +29,7 @@ actions!(
         SelectAll,
         Save,
         ToggleBlame,
+        ToggleWrap,
         // workspace
         ToggleSidebar,
         OpenFolder,
