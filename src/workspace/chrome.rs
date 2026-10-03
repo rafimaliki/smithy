@@ -65,6 +65,7 @@ impl Workspace {
             rail_button("rail-settings", "S", self.show_settings, t).on_click(cx.listener(
                 |this, _, _, cx| {
                     this.show_settings = !this.show_settings;
+                    this.capture = None;
                     cx.notify();
                 },
             )),
