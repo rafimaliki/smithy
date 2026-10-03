@@ -1,0 +1,40 @@
+//! Every keyboard-triggered action. Bindings live in `keymap.rs`.
+use gpui::actions;
+
+actions!(
+    smithy,
+    [
+        // editor
+        MoveLeft,
+        MoveRight,
+        MoveUp,
+        MoveDown,
+        SelectLeft,
+        SelectRight,
+        SelectUp,
+        SelectDown,
+        Home,
+        End,
+        SelectHome,
+        SelectEnd,
+        Backspace,
+        Delete,
+        Enter,
+        Tab,
+        Undo,
+        Redo,
+        Copy,
+        Cut,
+        Paste,
+        SelectAll,
+        Save,
+        // workspace
+        ToggleSidebar,
+        OpenFolder,
+        CloseTab,
+        NextTab,
+        PrevTab,
+        ReopenTab,
+        Quit,
+    ]
+);

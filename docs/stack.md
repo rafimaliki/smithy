@@ -67,6 +67,10 @@ Throwaway code is in `spike/gpui` and `spike/egui`. Not yet tested: tree, text i
 
 gpui is not a git-only dependency any more: `gpui = "0.2.2"` is on crates.io. The empty gpui window alone uses 132 MB, which is why the RAM target moved from 150 to 200 MB and gpui was kept. The 1 s cold-start target holds for both. Window-handle time is a rough proxy for first paint. Still to check before building features: RAM while typing and scrolling. If gpui passes 200 MB under load, reopen the egui decision.
 
+### Core build under real use (scaffold PR, 2026-10-03, release build, this repo open)
+
+Own editor (ropey buffer, virtualized lines, typing, save, undo, unsaved prompt), file tree, tabs, no add-ons on: working set 108 MB right after open, 83 MB with a file open and after typing; private bytes 65-70 MB. Window handle in 0.58-0.66 s, measured through a PowerShell poll that adds its own overhead, so the real figure is lower. Both targets hold with room for tree-sitter, the watcher and the Search/Source control add-ons. The load check in the spike section is closed: gpui stays.
+
 ## Rejected
 
 - Webview or Electron (Tauri included): works against the low-RAM goal.

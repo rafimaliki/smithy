@@ -1,0 +1,351 @@
+//! The window's root view: open folder, tabs, sidebar, add-on registry.
+//! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
+mod chrome;
+mod launch;
+mod render;
+mod settings_view;
+pub mod tab_set;
+
+use crate::actions::*;
+use crate::addon::{AddonContext, Registry};
+use crate::editor::load::{self, Loaded};
+use crate::editor::state::EditorState;
+use crate::editor::view::EditorView;
+use crate::settings::{Settings, SIDEBAR_MAX, SIDEBAR_MIN};
+use crate::tree::view::{TreeEvent, TreeView};
+use gpui::AppContext as _;
+use gpui::{
+    AnyView, Context, Entity, FocusHandle, Focusable, PathPromptOptions, SharedString,
+    Subscription, Window,
+};
+use std::path::{Path, PathBuf};
+use tab_set::TabSet;
+
+pub enum TabContent {
+    Editor(Entity<EditorView>, #[allow(dead_code)] Subscription),
+    Viewer(AnyView),
+    /// Binary, too large, or unreadable: nothing is loaded, this explains why.
+    Notice(SharedString),
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Sidebar {
+    Files,
+    Addon(&'static str),
+}
+
+pub struct Workspace {
+    pub(crate) folder: Option<PathBuf>,
+    pub(crate) registry: Registry,
+    pub(crate) tree: Option<Entity<TreeView>>,
+    tree_sub: Option<Subscription>,
+    pub(crate) tabs: TabSet<TabContent>,
+    pub(crate) sidebar: Sidebar,
+    pub(crate) sidebar_visible: bool,
+    /// Raw sidebar width while the divider is being dragged.
+    pub(crate) drag: Option<f32>,
+    pub(crate) show_settings: bool,
+    /// Tab waiting on the unsaved-changes prompt.
+    pub(crate) pending_close: Option<usize>,
+    pub(crate) error: Option<SharedString>,
+    focus: FocusHandle,
+}
+
+impl Focusable for Workspace {
+    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+        self.focus.clone()
+    }
+}
+
+impl Workspace {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        Self {
+            folder: None,
+            registry: Registry::new(),
+            tree: None,
+            tree_sub: None,
+            tabs: TabSet::default(),
+            sidebar: Sidebar::Files,
+            sidebar_visible: true,
+            drag: None,
+            show_settings: false,
+            pending_close: None,
+            error: None,
+            focus: cx.focus_handle(),
+        }
+    }
+
+    pub fn settings<'a>(&self, cx: &'a gpui::App) -> &'a Settings {
+        cx.global::<Settings>()
+    }
+
+    pub fn update_settings(&mut self, cx: &mut Context<Self>, f: impl FnOnce(&mut Settings)) {
+        let s = cx.global_mut::<Settings>();
+        f(s);
+        s.save();
+        cx.notify();
+    }
+
+    // ---- folder -------------------------------------------------------------
+
+    pub fn prompt_open_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let rx = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Open folder".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = rx.await {
+                if let Some(path) = paths.into_iter().next() {
+                    this.update_in(cx, |this, window, cx| this.open_folder(path, window, cx))
+                        .ok();
+                }
+            }
+        })
+        .detach();
+    }
+
+    pub fn open_folder(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        if !path.is_dir() {
+            self.error = Some(format!("{} is not a folder", path.display()).into());
+            cx.notify();
+            return;
+        }
+        self.error = None;
+        self.tabs = TabSet::default();
+        self.pending_close = None;
+        self.sidebar = Sidebar::Files;
+        self.sidebar_visible = true;
+        self.show_settings = false;
+        let tree = cx.new(|_| TreeView::new(path.clone()));
+        self.tree_sub =
+            Some(
+                cx.subscribe_in(&tree, window, |this, _, e: &TreeEvent, window, cx| {
+                    let TreeEvent::Open(p) = e;
+                    this.open_file(p, window, cx);
+                }),
+            );
+        self.tree = Some(tree);
+        self.folder = Some(path.clone());
+        self.update_settings(cx, |s| s.push_recent(path.clone()));
+        self.restart_addons(cx);
+    }
+
+    /// Drop every running add-on and start the enabled ones again for the current folder.
+    fn restart_addons(&mut self, cx: &mut Context<Self>) {
+        self.registry = Registry::new();
+        let ctx = AddonContext {
+            root: self.folder.clone(),
+        };
+        let enabled = cx.global::<Settings>().addons.clone();
+        self.registry.start_enabled(&enabled, &ctx, cx);
+        if let Sidebar::Addon(id) = self.sidebar {
+            if self.registry.instance(id).is_none() {
+                self.sidebar = Sidebar::Files;
+            }
+        }
+    }
+
+    pub fn set_addon(&mut self, id: &str, on: bool, cx: &mut Context<Self>) {
+        let enabled = cx.global::<Settings>().addons.clone();
+        let ctx = AddonContext {
+            root: self.folder.clone(),
+        };
+        let changed: Vec<&'static str> = if on {
+            self.registry.enable(id, &enabled, &ctx, cx)
+        } else {
+            self.registry.disable(id, &enabled)
+        };
+        self.update_settings(cx, |s| {
+            for c in &changed {
+                s.addons.retain(|a| a != c);
+                if on {
+                    s.addons.push((*c).to_string());
+                }
+            }
+        });
+        if let Sidebar::Addon(sid) = self.sidebar {
+            if self.registry.instance(sid).is_none() {
+                self.sidebar = Sidebar::Files;
+            }
+        }
+    }
+
+    // ---- tabs ---------------------------------------------------------------
+
+    pub fn open_file(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+        self.show_settings = false;
+        match self.tabs.position(path) {
+            Some(i) => self.tabs.active = i,
+            None => {
+                let content = self.make_content(path, window, cx);
+                self.tabs.open(path, || content);
+            }
+        }
+        self.focus_tab(window, cx);
+        cx.notify();
+    }
+
+    fn make_content(
+        &mut self,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> TabContent {
+        for (_, inst) in self.registry.running() {
+            if let Some(view) = inst.viewer_for(path, window, cx) {
+                return TabContent::Viewer(view);
+            }
+        }
+        match load::load(path) {
+            Loaded::Text { text, read_only } => {
+                let state = EditorState::new(&text, Some(path.to_path_buf()), read_only);
+                let editor = cx.new(|cx| EditorView::new(state, cx));
+                let sub = cx.observe(&editor, |_, _, cx| cx.notify());
+                TabContent::Editor(editor, sub)
+            }
+            Loaded::Binary => {
+                TabContent::Notice("This is a binary file, so it is not loaded.".into())
+            }
+            Loaded::TooLarge(n) => TabContent::Notice(
+                format!("This file is {} MB, too large to open.", n / (1024 * 1024)).into(),
+            ),
+            Loaded::Error(e) => TabContent::Notice(format!("Could not read the file: {e}").into()),
+        }
+    }
+
+    pub(crate) fn focus_tab(&self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.tabs.active_tab().map(|t| &t.content) {
+            Some(TabContent::Editor(e, _)) => e.read(cx).focus(window),
+            _ => window.focus(&self.focus),
+        }
+    }
+
+    pub(crate) fn is_dirty(&self, i: usize, cx: &gpui::App) -> bool {
+        match self.tabs.tabs.get(i).map(|t| &t.content) {
+            Some(TabContent::Editor(e, _)) => e.read(cx).state.is_dirty(),
+            _ => false,
+        }
+    }
+
+    /// Close tab `i`, asking first if it has unsaved edits.
+    pub fn request_close(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_dirty(i, cx) {
+            self.pending_close = Some(i);
+        } else {
+            self.tabs.close(i);
+            self.focus_tab(window, cx);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn resolve_close(
+        &mut self,
+        save: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(i) = self.pending_close.take() {
+            if save {
+                self.save_tab(i, cx);
+            }
+            if !(save && self.is_dirty(i, cx)) {
+                self.tabs.close(i);
+            }
+            self.focus_tab(window, cx);
+        }
+        cx.notify();
+    }
+
+    fn save_tab(&mut self, i: usize, cx: &mut Context<Self>) {
+        if let Some(TabContent::Editor(e, _)) = self.tabs.tabs.get(i).map(|t| &t.content) {
+            let result = e.update(cx, |e, cx| e.save(cx));
+            if let Err(err) = result {
+                self.error = Some(format!("Could not save: {err}").into());
+            }
+        }
+    }
+
+    // ---- sidebar ------------------------------------------------------------
+
+    pub(crate) fn clamp_width(w: f32) -> f32 {
+        w.clamp(SIDEBAR_MIN, SIDEBAR_MAX)
+    }
+
+    /// Rail click: the active view collapses the sidebar, another view shows it.
+    pub(crate) fn select_sidebar(&mut self, s: Sidebar, cx: &mut Context<Self>) {
+        let leaving_settings = std::mem::take(&mut self.show_settings);
+        if self.sidebar == s && self.sidebar_visible && !leaving_settings {
+            self.sidebar_visible = false;
+        } else {
+            self.sidebar = s;
+            self.sidebar_visible = true;
+        }
+        cx.notify();
+    }
+
+    // ---- action handlers ----------------------------------------------------
+
+    pub(crate) fn on_toggle_sidebar(
+        &mut self,
+        _: &ToggleSidebar,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.sidebar_visible = !self.sidebar_visible;
+        cx.notify();
+    }
+
+    pub(crate) fn on_open_folder(
+        &mut self,
+        _: &OpenFolder,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.prompt_open_folder(window, cx);
+    }
+
+    pub(crate) fn on_close_tab(
+        &mut self,
+        _: &CloseTab,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.tabs.tabs.is_empty() {
+            self.request_close(self.tabs.active, window, cx);
+        }
+    }
+
+    pub(crate) fn on_next_tab(&mut self, _: &NextTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.tabs.next();
+        self.focus_tab(window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn on_prev_tab(&mut self, _: &PrevTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.tabs.prev();
+        self.focus_tab(window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn on_reopen_tab(
+        &mut self,
+        _: &ReopenTab,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(p) = self.tabs.pop_closed() {
+            self.open_file(&p, window, cx);
+        }
+    }
+
+    pub(crate) fn on_save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
+        self.save_tab(self.tabs.active, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn on_quit(&mut self, _: &Quit, _: &mut Window, cx: &mut Context<Self>) {
+        cx.quit();
+    }
+}

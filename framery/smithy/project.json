@@ -14,6 +14,10 @@
     {
       "id": "icons",
       "title": "File icons"
+    },
+    {
+      "id": "plan",
+      "title": "Implementation plan"
     }
   ]
 }
