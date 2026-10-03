@@ -4,9 +4,30 @@ use crate::actions::{
     CloseTab, NextTab, OpenFolder, PrevTab, Quit, ReopenTab, Save, SearchEverywhere, ToggleSidebar,
     ToggleTerminal,
 };
+use crate::editor::view::EditorEvent;
 use gpui::{Context, Window};
 
 impl Workspace {
+    /// The editor asked to navigate (Ctrl+Click, F12, Shift+F12, Alt+Left/Right):
+    /// the first add-on that knows what to do with it takes it.
+    pub(crate) fn on_editor_navigate(
+        &mut self,
+        event: &EditorEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let EditorEvent::Navigate {
+            what,
+            path,
+            line,
+            character,
+        } = event;
+        for (_, instance) in self.registry.running() {
+            if instance.navigate(*what, path, *line, *character, window, cx) {
+                break;
+            }
+        }
+    }
     pub(crate) fn on_toggle_sidebar(
         &mut self,
         _: &ToggleSidebar,
@@ -55,9 +76,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(p) = self.tabs.pop_closed() {
-            self.open_file(&p, window, cx);
-        }
+        self.reopen_last(window, cx);
     }
 
     /// Ctrl+Shift+O: hand the key to the add-on that owns Search everywhere.

@@ -9,8 +9,10 @@
 //! [`all`]. `image_viewer.rs` is the reference.
 mod deps;
 pub mod image_viewer;
+pub mod lsp;
 pub mod markdown;
 pub mod pdf;
+pub mod pull_requests;
 mod registry;
 pub mod search;
 pub mod source_control;
@@ -82,6 +84,42 @@ pub struct StatusInfo {
     pub detail: String,
 }
 
+/// A navigation gesture in the editor that an add-on may answer.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Navigate {
+    /// Ctrl+Click, or F12.
+    Definition,
+    /// Shift+F12, or Ctrl+Click on a definition.
+    References,
+    /// Alt+Left.
+    Back,
+    /// Alt+Right.
+    Forward,
+}
+
+/// How far a language server is, as Settings > Languages shows it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ServerState {
+    /// On and found on PATH.
+    On,
+    /// Off in Settings > Languages.
+    Off,
+    /// On, but the command is not on PATH.
+    NotInstalled,
+}
+
+/// One row an add-on contributes to Settings > Languages.
+#[derive(Clone)]
+pub struct LanguageServerRow {
+    /// Id `toggle_language_server` takes.
+    pub id: &'static str,
+    /// Language name, matching `editor::lang::Lang::name`.
+    pub language: &'static str,
+    /// Command shown in the Language server column.
+    pub server: &'static str,
+    pub state: ServerState,
+}
+
 pub trait Addon {
     fn info(&self) -> AddonInfo;
     /// Build the running add-on. Called once when it is turned on.
@@ -143,14 +181,36 @@ pub trait AddonInstance {
     ) -> Option<AnyView> {
         None
     }
+    /// The editor saw a navigation gesture at `path`, `line`, `character` (0-based;
+    /// `character` in UTF-16 units). Return true when the add-on took it. Back and
+    /// forward carry no position, so ignore the last three there.
+    fn navigate(
+        &self,
+        _what: Navigate,
+        _path: &Path,
+        _line: u32,
+        _character: u32,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> bool {
+        false
+    }
+    /// Per-language server rows for Settings > Languages. Empty while the add-on is off.
+    fn language_servers(&self) -> Vec<LanguageServerRow> {
+        Vec::new()
+    }
+    /// Settings > Languages: turn the server for `id` on or off.
+    fn toggle_language_server(&self, _id: &str, _cx: &mut App) {}
 }
 
 /// Every add-on Smithy ships. One line per add-on.
 pub fn all() -> Vec<Box<dyn Addon>> {
     vec![
         Box::new(image_viewer::ImageViewer),
+        Box::new(lsp::LanguageServers),
         Box::new(markdown::Markdown),
         Box::new(pdf::PdfViewer),
+        Box::new(pull_requests::PullRequests),
         Box::new(search::Search),
         Box::new(source_control::SourceControl),
         Box::new(terminal::Terminal),

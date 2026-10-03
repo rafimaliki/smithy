@@ -10,12 +10,16 @@ exclude = ["spike/gpui", "spike/egui"]
 [dependencies]
 git2 = { version = "0.21.0", default-features = false }
 gpui = "0.2.2"
+keyring = { version = "3", default-features = false, features = ["windows-native"] }
 ignore = "0.4"
+notify = "8"
 pulldown-cmark = { version = "0.13", default-features = false }
 regex = "1"
 ropey = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+ureq = "2"
+
 # Delete to the Recycle Bin (file tree menu).
 trash = "5"
 
@@ -41,6 +45,8 @@ vte = "0.15"
 # file of that type opens. `tree-sitter` is the runtime; the rest are grammars
 # (tiny C files, no extra build tools beyond the MSVC one the app already needs).
 tree-sitter = "0.27"
+# Language servers add-on: the protocol's request and response shapes.
+lsp-types = "0.97"
 tree-sitter-bash = "0.25"
 tree-sitter-c = "0.24"
 tree-sitter-c-sharp = "0.23"
