@@ -1,15 +1,14 @@
 //! Reading a file for the editor: large and binary file guard.
 use std::path::Path;
 
-/// Above this a file opens read-only (and, later, without highlighting).
+/// Above this a file opens read-only, without highlighting, to save memory.
+// ponytail: the whole file is still read into memory; upgrade: hold only the
+// visible lines, as the large-file screen describes.
 pub const LARGE_FILE_BYTES: u64 = 2 * 1024 * 1024;
-/// Above this a file is not loaded at all.
-pub const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 pub enum Loaded {
     Text { text: String, read_only: bool },
     Binary,
-    TooLarge(u64),
     Error(String),
 }
 
@@ -18,9 +17,6 @@ pub fn load(path: &Path) -> Loaded {
         Ok(m) => m.len(),
         Err(e) => return Loaded::Error(e.to_string()),
     };
-    if size > MAX_FILE_BYTES {
-        return Loaded::TooLarge(size);
-    }
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
         Err(e) => return Loaded::Error(e.to_string()),

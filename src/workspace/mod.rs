@@ -1,5 +1,6 @@
 //! The window's root view: open folder, tabs, sidebar, add-on registry.
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
+mod banner;
 mod chrome;
 mod dialog;
 mod lang_menu;
@@ -11,6 +12,7 @@ mod settings_shortcuts;
 mod settings_shortcuts_view;
 mod settings_view;
 pub mod tab_set;
+pub(crate) mod watch;
 
 use crate::actions::*;
 use crate::addon::{AddonContext, Registry};
@@ -37,7 +39,12 @@ pub enum TabContent {
         view: AnyView,
         title: SharedString,
     },
-    /// Binary, too large, or unreadable: nothing is loaded, this explains why.
+    /// A binary file, never loaded; the screen offers Reveal in File Explorer.
+    Binary {
+        path: PathBuf,
+        size: u64,
+    },
+    /// Unreadable: nothing is loaded, this explains why.
     Notice(SharedString),
 }
 
@@ -71,6 +78,8 @@ pub struct Workspace {
     /// Path waiting on the delete-to-Recycle-Bin confirmation.
     pub(crate) pending_delete: Option<PathBuf>,
     pub(crate) error: Option<SharedString>,
+    /// Filesystem watcher for the open folder; `None` until one is open.
+    pub(crate) watch: Option<watch::Watch>,
     focus: FocusHandle,
     /// Keeps the keystroke interceptor alive for the window's life.
     _capture_sub: Subscription,
@@ -112,6 +121,7 @@ impl Workspace {
             pending_close: None,
             pending_delete: None,
             error: None,
+            watch: None,
             focus: cx.focus_handle(),
             _capture_sub: capture_sub,
         }
@@ -183,6 +193,7 @@ impl Workspace {
         self.folder = Some(path.clone());
         self.update_settings(cx, |s| s.push_recent(path.clone()));
         self.restart_addons(cx);
+        watch::start(self, window, cx);
     }
 
     /// Drop every running add-on and start the enabled ones again for the current folder.
@@ -242,6 +253,7 @@ impl Workspace {
             }
         }
         self.focus_tab(window, cx);
+        watch::sync(self);
         cx.notify();
     }
 
@@ -269,11 +281,12 @@ impl Workspace {
                 TabContent::Editor(editor, sub)
             }
             Loaded::Binary => {
-                TabContent::Notice("This is a binary file, so it is not loaded.".into())
+                let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                TabContent::Binary {
+                    path: path.to_path_buf(),
+                    size,
+                }
             }
-            Loaded::TooLarge(n) => TabContent::Notice(
-                format!("This file is {} MB, too large to open.", n / (1024 * 1024)).into(),
-            ),
             Loaded::Error(e) => TabContent::Notice(format!("Could not read the file: {e}").into()),
         }
     }
@@ -299,6 +312,7 @@ impl Workspace {
         } else {
             self.tabs.close(i);
             self.focus_tab(window, cx);
+            watch::sync(self);
         }
         cx.notify();
     }
@@ -317,6 +331,7 @@ impl Workspace {
                 self.tabs.close(i);
             }
             self.focus_tab(window, cx);
+            watch::sync(self);
         }
         cx.notify();
     }
@@ -385,6 +400,7 @@ impl Workspace {
             }
         }
         self.tabs.remap_paths(from, to);
+        watch::sync(self);
         cx.notify();
     }
 

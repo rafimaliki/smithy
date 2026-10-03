@@ -7,6 +7,7 @@ mod rows;
 use super::highlight::Highlighter;
 use super::lang::Lang;
 use super::layout::col_at_visual;
+use super::load::{self, Loaded};
 use super::state::EditorState;
 use crate::actions::*;
 use crate::addon::EditorDecorations;
@@ -16,6 +17,7 @@ use gpui::{
     canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
     KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
+use std::time::SystemTime;
 
 pub const MONO: &str = "Cascadia Mono";
 const LINE_H: f32 = 21.0;
@@ -37,6 +39,13 @@ pub struct EditorView {
     highlighter: Option<Highlighter>,
     /// Buffer revision the spans were built from; `u64::MAX` forces the first pass.
     hl_revision: u64,
+    /// Size on disk, shown by the large-file bar.
+    size_bytes: u64,
+    /// The file changed on disk while this buffer had unsaved edits.
+    disk_changed: bool,
+    /// Modification time of the content we last loaded or wrote, so the watcher
+    /// can tell an external change from our own save.
+    disk_mtime: Option<SystemTime>,
 }
 
 impl Focusable for EditorView {
@@ -54,6 +63,12 @@ impl EditorView {
         } else {
             lang.and_then(Highlighter::new)
         };
+        let on_disk = state
+            .path
+            .as_deref()
+            .and_then(|p| std::fs::metadata(p).ok());
+        let size_bytes = on_disk.as_ref().map(|m| m.len()).unwrap_or(0);
+        let disk_mtime = on_disk.and_then(|m| m.modified().ok());
         Self {
             state,
             focus: cx.focus_handle(),
@@ -65,6 +80,9 @@ impl EditorView {
             lang,
             highlighter,
             hl_revision: u64::MAX,
+            size_bytes,
+            disk_changed: false,
+            disk_mtime,
         }
     }
 
@@ -115,11 +133,86 @@ impl EditorView {
     /// Write the buffer to its path and clear the dirty mark.
     pub fn save(&mut self, cx: &mut Context<Self>) -> std::io::Result<()> {
         if let Some(path) = self.state.path.clone() {
-            std::fs::write(path, self.state.buffer.text())?;
+            std::fs::write(&path, self.state.buffer.text())?;
             self.state.mark_saved();
+            self.disk_mtime = std::fs::metadata(&path)
+                .ok()
+                .and_then(|m| m.modified().ok());
+            self.disk_changed = false;
             cx.notify();
         }
         Ok(())
+    }
+
+    /// Size on disk, for the large-file bar.
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+
+    /// The file changed on disk while this buffer had unsaved edits.
+    pub fn disk_changed(&self) -> bool {
+        self.disk_changed
+    }
+
+    /// Act on an external change to the open file. Reloads silently when the buffer
+    /// is clean; raises the Reload / Keep mine bar when it has unsaved edits.
+    pub fn external_change(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.state.path.clone() else {
+            return;
+        };
+        let mtime = std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok());
+        if mtime.is_none() || mtime == self.disk_mtime {
+            // Gone, or the write we just made ourselves.
+            return;
+        }
+        if self.state.is_dirty() {
+            self.disk_mtime = mtime;
+            self.disk_changed = true;
+            cx.notify();
+            return;
+        }
+        self.reload_from_disk(cx);
+    }
+
+    /// Reload the file from disk, discarding the buffer (Reload on the bar).
+    pub fn reload_from_disk(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.state.path.clone() else {
+            return;
+        };
+        let mtime = std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok());
+        if let Loaded::Text { text, read_only } = load::load(&path) {
+            self.state.read_only = read_only;
+            self.state.reload(&text);
+            self.highlighter = if read_only {
+                None
+            } else {
+                self.lang.and_then(Highlighter::new)
+            };
+            self.hl_revision = u64::MAX;
+            self.refresh_highlight();
+            self.disk_changed = false;
+            self.disk_mtime = mtime;
+            cx.notify();
+        }
+    }
+
+    /// Keep the buffer after an external change; the next save overwrites the disk.
+    pub fn keep_mine(&mut self, cx: &mut Context<Self>) {
+        self.disk_changed = false;
+        cx.notify();
+    }
+
+    /// Large file: open editable, with highlighting, after the deliberate click.
+    pub fn open_normally(&mut self, cx: &mut Context<Self>) {
+        self.state.read_only = false;
+        self.highlighter = self.lang.and_then(Highlighter::new);
+        self.hl_revision = u64::MAX;
+        self.refresh_highlight();
+        cx.notify();
     }
 
     fn changed(&mut self, cx: &mut Context<Self>) {

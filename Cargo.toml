@@ -8,8 +8,10 @@ publish = false
 exclude = ["spike/gpui", "spike/egui"]
 
 [dependencies]
+async-channel = "2"
 git2 = { version = "0.21.0", default-features = false }
 gpui = "0.2.2"
+notify = "8"
 pulldown-cmark = { version = "0.13", default-features = false }
 ropey = "1"
 serde = { version = "1", features = ["derive"] }

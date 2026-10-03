@@ -36,6 +36,16 @@ impl EditorState {
         self.saved_revision = self.buffer.revision;
     }
 
+    /// Replace the buffer with disk content after an external change; the caret
+    /// resets and the result counts as saved.
+    pub fn reload(&mut self, text: &str) {
+        self.buffer = Buffer::new(text);
+        self.cursor = 0;
+        self.anchor = 0;
+        self.want_col = 0;
+        self.saved_revision = self.buffer.revision;
+    }
+
     pub fn selection(&self) -> (usize, usize) {
         (self.cursor.min(self.anchor), self.cursor.max(self.anchor))
     }
@@ -199,6 +209,20 @@ mod tests {
         assert_eq!(e.line_col(e.cursor), (1, 2));
         e.move_vertical(1, false);
         assert_eq!(e.line_col(e.cursor), (2, 5));
+    }
+
+    #[test]
+    fn reload_replaces_text_and_clears_dirty() {
+        let mut e = EditorState::new("old", None, false);
+        e.select_all();
+        e.insert("edited");
+        assert!(e.is_dirty());
+        e.set_cursor(3, false);
+        e.reload("new\ncontent");
+        assert_eq!(e.buffer.text(), "new\ncontent");
+        assert!(!e.is_dirty());
+        assert_eq!(e.cursor, 0);
+        assert_eq!(e.anchor, 0);
     }
 
     #[test]
