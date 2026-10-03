@@ -81,6 +81,33 @@ impl<C> TabSet<C> {
         self.closed.pop()
     }
 
+    /// Follow a rename: every tab at `from` or under it moves to `to`.
+    pub fn remap_paths(&mut self, from: &Path, to: &Path) {
+        let moved = |p: &Path| -> PathBuf {
+            match p.strip_prefix(from) {
+                Ok(rest) => to.join(rest),
+                Err(_) => p.to_path_buf(),
+            }
+        };
+        for tab in &mut self.tabs {
+            tab.path = moved(&tab.path);
+        }
+        for path in &mut self.closed {
+            *path = moved(path);
+        }
+    }
+
+    /// Close every tab at `path` or under it. A deleted path is not remembered for
+    /// reopen. Returns how many closed.
+    pub fn close_under(&mut self, path: &Path) -> usize {
+        let before = self.tabs.len();
+        self.tabs.retain(|t| !t.path.starts_with(path));
+        if self.active >= self.tabs.len() {
+            self.active = self.tabs.len().saturating_sub(1);
+        }
+        before - self.tabs.len()
+    }
+
     /// Pin or unpin; pinned tabs sit at the left, the toggled tab lands on the
     /// pinned/unpinned boundary.
     pub fn toggle_pin(&mut self, i: usize) {
@@ -123,7 +150,7 @@ mod tests {
     fn order(s: &TabSet<()>) -> Vec<String> {
         s.tabs
             .iter()
-            .map(|t| t.path.to_string_lossy().into_owned())
+            .map(|t| t.path.to_string_lossy().replace('\\', "/"))
             .collect()
     }
 
@@ -165,5 +192,27 @@ mod tests {
         assert_eq!(s.active, 0);
         s.close(0);
         assert!(s.active_tab().is_none());
+    }
+
+    #[test]
+    fn a_rename_carries_the_tabs_under_the_moved_folder() {
+        let mut s = set(&["src/a.rs", "src/deep/b.rs", "other.rs"]);
+        s.remap_paths(Path::new("src"), Path::new("code"));
+        assert_eq!(order(&s), ["code/a.rs", "code/deep/b.rs", "other.rs"]);
+        // A sibling with the same prefix is not part of it.
+        let mut s = set(&["src/a.rs", "src2/b.rs"]);
+        s.remap_paths(Path::new("src"), Path::new("code"));
+        assert_eq!(order(&s), ["code/a.rs", "src2/b.rs"]);
+    }
+
+    #[test]
+    fn close_under_takes_the_folder_and_its_files_and_clamps_active() {
+        let mut s = set(&["src/a.rs", "src/b.rs", "other.rs"]);
+        s.active = 2;
+        assert_eq!(s.close_under(Path::new("src")), 2);
+        assert_eq!(order(&s), ["other.rs"]);
+        assert_eq!(s.active, 0);
+        // Deleted files are not offered for reopen.
+        assert_eq!(s.pop_closed(), None);
     }
 }

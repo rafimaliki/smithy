@@ -1,8 +1,11 @@
 //! The window's root view: open folder, tabs, sidebar, add-on registry.
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
+mod actions;
 mod chrome;
+mod dialog;
 mod lang_menu;
 mod launch;
+pub(crate) mod menu;
 mod render;
 mod settings_languages;
 mod settings_shortcuts;
@@ -10,7 +13,6 @@ mod settings_shortcuts_view;
 mod settings_view;
 pub mod tab_set;
 
-use crate::actions::*;
 use crate::addon::{AddonContext, Registry};
 use crate::editor::load::{self, Loaded};
 use crate::editor::state::EditorState;
@@ -66,6 +68,8 @@ pub struct Workspace {
     pub(crate) shortcut_filter: String,
     /// Tab waiting on the unsaved-changes prompt.
     pub(crate) pending_close: Option<usize>,
+    /// Path waiting on the delete-to-Recycle-Bin confirmation.
+    pub(crate) pending_delete: Option<PathBuf>,
     pub(crate) error: Option<SharedString>,
     focus: FocusHandle,
     /// Keeps the keystroke interceptor alive for the window's life.
@@ -106,6 +110,7 @@ impl Workspace {
             capture: None,
             shortcut_filter: String::new(),
             pending_close: None,
+            pending_delete: None,
             error: None,
             focus: cx.focus_handle(),
             _capture_sub: capture_sub,
@@ -152,18 +157,28 @@ impl Workspace {
         self.error = None;
         self.tabs = TabSet::default();
         self.pending_close = None;
+        self.pending_delete = None;
         self.sidebar = Sidebar::Files;
         self.sidebar_visible = true;
         self.show_settings = false;
         self.lang_menu = false;
-        let tree = cx.new(|_| TreeView::new(path.clone()));
-        self.tree_sub =
-            Some(
-                cx.subscribe_in(&tree, window, |this, _, e: &TreeEvent, window, cx| {
-                    let TreeEvent::Open(p) = e;
-                    this.open_file(p, window, cx);
-                }),
-            );
+        let tree = cx.new(|cx| TreeView::new(path.clone(), cx));
+        self.tree_sub = Some(cx.subscribe_in(
+            &tree,
+            window,
+            |this, _, e: &TreeEvent, window, cx| match e {
+                TreeEvent::Open(p) => this.open_file(p, window, cx),
+                TreeEvent::DeleteRequested(p) => {
+                    this.pending_delete = Some(p.clone());
+                    cx.notify();
+                }
+                TreeEvent::Moved { from, to } => this.remap_paths(from, to, cx),
+                TreeEvent::Error(message) => {
+                    this.error = Some(message.clone().into());
+                    cx.notify();
+                }
+            },
+        ));
         self.tree = Some(tree);
         self.folder = Some(path.clone());
         self.update_settings(cx, |s| s.push_recent(path.clone()));
@@ -374,6 +389,21 @@ impl Workspace {
         cx.notify();
     }
 
+    /// A path moved on disk (renamed or cut and pasted): open tabs and their
+    /// editors follow it, so saving writes to the new place.
+    fn remap_paths(&mut self, from: &Path, to: &Path, cx: &mut Context<Self>) {
+        for tab in &self.tabs.tabs {
+            if let Ok(rest) = tab.path.strip_prefix(from) {
+                let new = to.join(rest);
+                if let TabContent::Editor(e, _) = &tab.content {
+                    e.update(cx, |e, _| e.state.path = Some(new));
+                }
+            }
+        }
+        self.tabs.remap_paths(from, to);
+        cx.notify();
+    }
+
     // ---- sidebar ------------------------------------------------------------
 
     pub(crate) fn clamp_width(w: f32) -> f32 {
@@ -393,82 +423,5 @@ impl Workspace {
             self.sidebar_visible = true;
         }
         cx.notify();
-    }
-
-    // ---- action handlers ----------------------------------------------------
-
-    pub(crate) fn on_toggle_sidebar(
-        &mut self,
-        _: &ToggleSidebar,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.sidebar_visible = !self.sidebar_visible;
-        cx.notify();
-    }
-
-    pub(crate) fn on_open_folder(
-        &mut self,
-        _: &OpenFolder,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.prompt_open_folder(window, cx);
-    }
-
-    pub(crate) fn on_close_tab(
-        &mut self,
-        _: &CloseTab,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if !self.tabs.tabs.is_empty() {
-            self.request_close(self.tabs.active, window, cx);
-        }
-    }
-
-    pub(crate) fn on_next_tab(&mut self, _: &NextTab, window: &mut Window, cx: &mut Context<Self>) {
-        self.tabs.next();
-        self.focus_tab(window, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn on_prev_tab(&mut self, _: &PrevTab, window: &mut Window, cx: &mut Context<Self>) {
-        self.tabs.prev();
-        self.focus_tab(window, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn on_reopen_tab(
-        &mut self,
-        _: &ReopenTab,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(p) = self.tabs.pop_closed() {
-            self.open_file(&p, window, cx);
-        }
-    }
-
-    /// Ctrl+Shift+O: hand the key to the add-on that owns Search everywhere.
-    pub(crate) fn on_search_everywhere(
-        &mut self,
-        _: &SearchEverywhere,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        for (_, inst) in self.registry.running() {
-            inst.toggle_search_everywhere(window, cx);
-        }
-        cx.notify();
-    }
-
-    pub(crate) fn on_save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
-        self.save_tab(self.tabs.active, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn on_quit(&mut self, _: &Quit, _: &mut Window, cx: &mut Context<Self>) {
-        cx.quit();
     }
 }
