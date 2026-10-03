@@ -322,7 +322,7 @@ fn typed_char(e: &KeyDownEvent, key: &str) -> Option<String> {
     }
 }
 
-fn icon(t: &Theme, simple: bool, path: &std::path::Path, is_dir: bool) -> AnyElement {
+pub(crate) fn icon(t: &Theme, simple: bool, path: &std::path::Path, is_dir: bool) -> AnyElement {
     let (asset, color, size) = if simple {
         (
             if is_dir { icons::FOLDER } else { icons::FILE },

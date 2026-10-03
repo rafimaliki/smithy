@@ -10,6 +10,7 @@ pub(crate) mod menu;
 mod render;
 mod settings_github;
 mod settings_languages;
+mod settings_previews;
 mod settings_shortcuts;
 mod settings_shortcuts_view;
 mod settings_view;
