@@ -8,7 +8,9 @@ publish = false
 exclude = ["spike/gpui", "spike/egui"]
 
 [dependencies]
-git2 = { version = "0.21.0", default-features = false }
+# `https`: libgit2 talks to github.com through WinHTTP (no OpenSSL); without it a fetch
+# of refs/pull/N/head fails with "no TLS stream available".
+git2 = { version = "0.21.0", default-features = false, features = ["https"] }
 gpui = "0.2.2"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
 ignore = "0.4"
