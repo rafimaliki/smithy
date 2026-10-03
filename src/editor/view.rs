@@ -9,20 +9,35 @@ use super::highlight::Highlighter;
 use super::lang::Lang;
 use super::load::{self, Loaded};
 use super::state::EditorState;
-use super::wrap::WrapIndex;
+use super::wrap::{Row, WrapIndex};
 use crate::actions::*;
-use crate::addon::EditorDecorations;
+use crate::addon::{EditorDecorations, Navigate};
 use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
-    canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
-    KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
+    canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, EventEmitter, FocusHandle,
+    Focusable, KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
+use std::path::PathBuf;
 use std::time::SystemTime;
 
 pub const MONO: &str = "Cascadia Mono";
 const LINE_H: f32 = 21.0;
 const GUTTER: f32 = 64.0;
+
+/// The editor asking the workspace to navigate — Ctrl+Click, F12, Shift+F12,
+/// Alt+Left or Alt+Right. The workspace owns the add-ons that can answer it.
+#[derive(Clone)]
+pub enum EditorEvent {
+    Navigate {
+        what: Navigate,
+        path: PathBuf,
+        line: u32,
+        character: u32,
+    },
+}
+
+impl EventEmitter<EditorEvent> for EditorView {}
 
 pub struct EditorView {
     pub state: EditorState,
@@ -252,6 +267,42 @@ impl EditorView {
         cx.notify();
     }
 
+    /// Column `col` of `line` as UTF-16 units, the way a language server counts.
+    fn character(&self, line: usize, col: usize) -> u32 {
+        self.state
+            .buffer
+            .line(line)
+            .chars()
+            .take(col)
+            .map(|c| c.len_utf16() as u32)
+            .sum()
+    }
+
+    /// Ctrl+Click: a navigation gesture, not a caret move. Under wrap the click
+    /// lands on a slice of the logical line, so the column comes from `col_at`.
+    fn ctrl_click(&mut self, row: Row, x: Pixels, cx: &mut Context<Self>) {
+        let character = self.character(row.line, self.col_at(row, x));
+        self.emit_navigate(Navigate::Definition, row.line as u32, character, cx);
+    }
+
+    fn emit_navigate(&mut self, what: Navigate, line: u32, character: u32, cx: &mut Context<Self>) {
+        if let Some(path) = self.state.path.clone() {
+            cx.emit(EditorEvent::Navigate {
+                what,
+                path,
+                line,
+                character,
+            });
+        }
+    }
+
+    /// F12, Shift+F12: act on the symbol at the caret.
+    fn at_caret(&mut self, what: Navigate, cx: &mut Context<Self>) {
+        let (line, col) = self.state.line_col(self.state.cursor);
+        let character = self.character(line, col);
+        self.emit_navigate(what, line as u32, character, cx);
+    }
+
     fn key_down(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         let m = e.keystroke.modifiers;
         if m.control || m.alt || m.platform {
@@ -320,6 +371,22 @@ impl EditorView {
             s.insert(&text.replace("\r\n", "\n"));
         }
     });
+
+    fn goto_definition(&mut self, _: &GoToDefinition, _: &mut Window, cx: &mut Context<Self>) {
+        self.at_caret(Navigate::Definition, cx);
+    }
+
+    fn find_references(&mut self, _: &FindReferences, _: &mut Window, cx: &mut Context<Self>) {
+        self.at_caret(Navigate::References, cx);
+    }
+
+    fn nav_back(&mut self, _: &NavBack, _: &mut Window, cx: &mut Context<Self>) {
+        self.at_caret(Navigate::Back, cx);
+    }
+
+    fn nav_forward(&mut self, _: &NavForward, _: &mut Window, cx: &mut Context<Self>) {
+        self.at_caret(Navigate::Forward, cx);
+    }
 }
 
 impl Render for EditorView {
@@ -364,6 +431,10 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::goto_definition))
+            .on_action(cx.listener(Self::find_references))
+            .on_action(cx.listener(Self::nav_back))
+            .on_action(cx.listener(Self::nav_forward))
             .relative()
             .size_full()
             .bg(theme.bg)

@@ -51,7 +51,12 @@ impl EditorView {
                         MouseButton::Left,
                         cx.listener(move |this, e: &MouseDownEvent, window, cx| {
                             this.focus(window);
-                            this.click(r, e.position.x, e.modifiers.shift, cx);
+                            // Ctrl+Click goes to the definition; the caret does not move.
+                            if e.modifiers.control {
+                                this.ctrl_click(r, e.position.x, cx);
+                            } else {
+                                this.click(r, e.position.x, e.modifiers.shift, cx);
+                            }
                         }),
                     )
                     .on_mouse_move(cx.listener(move |this, e: &MouseMoveEvent, _, cx| {
