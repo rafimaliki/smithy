@@ -27,7 +27,8 @@ impl PrView {
                 .spawn(async move {
                     let repo =
                         Repo::discover(&root).ok_or_else(|| "No git repository".to_string())?;
-                    repo.pull_request(number, &base)
+                    let token = crate::github::token::load_token();
+                    repo.pull_request(number, &base, token.as_deref())
                         .map_err(|e| format!("git: {e}"))
                 })
                 .await;

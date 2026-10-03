@@ -6,12 +6,27 @@ use git2::{BranchType, Oid};
 impl Repo {
     /// Fetch `refs/pull/{number}/head` from `origin` and diff it against `base`,
     /// the way GitHub shows the pull request. Read-only beyond that one ref.
-    pub fn pull_request(&self, number: u64, base: &str) -> Result<Compare, git2::Error> {
+    /// `token` authenticates the fetch for private repositories; it is handed to
+    /// libgit2 for this call only and never written to the remote or the config.
+    pub fn pull_request(
+        &self,
+        number: u64,
+        base: &str,
+        token: Option<&str>,
+    ) -> Result<Compare, git2::Error> {
         let refname = format!("refs/pull/{number}/head");
         let refspec = format!("+{refname}:{refname}");
+        let mut callbacks = git2::RemoteCallbacks::new();
+        if let Some(token) = token {
+            callbacks.credentials(move |_, _, _| {
+                git2::Cred::userpass_plaintext("x-access-token", token)
+            });
+        }
+        let mut options = git2::FetchOptions::new();
+        options.remote_callbacks(callbacks);
         self.inner()
             .find_remote("origin")?
-            .fetch(&[refspec.as_str()], None, None)?;
+            .fetch(&[refspec.as_str()], Some(&mut options), None)?;
         let head = self.inner().refname_to_id(&refname)?;
         let base_oid = self.base_commit(base)?;
         let merge_base = self.inner().merge_base(base_oid, head)?;
@@ -116,7 +131,7 @@ mod tests {
         Repository::clone(upstream.to_str().unwrap(), &work).unwrap();
         let compare = {
             let repo = Repo::discover(&work).unwrap();
-            repo.pull_request(1, "main").unwrap()
+            repo.pull_request(1, "main", None).unwrap()
         };
         assert_eq!(compare.commits, 1);
         assert_eq!(compare.files.len(), 1);
@@ -126,5 +141,12 @@ mod tests {
 
         drop(upstream);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A fetch from github.com needs libgit2's HTTPS transport; it is a build
+    /// feature of the `git2` dependency, easy to lose by editing Cargo.toml.
+    #[test]
+    fn libgit2_is_built_with_https() {
+        assert!(git2::Version::get().https());
     }
 }
