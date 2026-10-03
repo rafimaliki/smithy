@@ -88,9 +88,6 @@ impl Workspace {
     }
 
     fn content(&self, right: bool, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        if self.show_settings {
-            return self.settings_view(t, cx).into_any_element();
-        }
         match self
             .group(right)
             .active_tab()
@@ -166,7 +163,7 @@ impl Workspace {
     /// The editor area: one column, or two side by side while split, with the
     /// add-on bottom panel under all of it.
     fn editor_area(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        let columns = if self.show_settings || !self.is_split() {
+        let columns = if !self.is_split() {
             div()
                 .flex_1()
                 .min_h_0()
@@ -276,7 +273,7 @@ impl Render for Workspace {
                         .min_h_0()
                         .flex()
                         .child(self.rail(&t, cx))
-                        .when(self.sidebar_visible && !self.show_settings, |d| {
+                        .when(self.sidebar_visible, |d| {
                             d.child(self.sidebar_panel(&t, width, collapsing))
                                 .child(self.divider(&t, cx))
                         })
@@ -296,6 +293,7 @@ impl Render for Workspace {
         .children(self.lang_menu(&t, cx))
         .children(self.tab_menu(&t, cx))
         .children(self.addon_overlay(cx))
+        .children(self.settings_modal(&t, cx))
         .children(self.unsaved_prompt(&t, cx))
         .children(self.delete_dialog(&t, cx))
     }

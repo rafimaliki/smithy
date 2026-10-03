@@ -56,7 +56,7 @@ impl Workspace {
     }
 
     pub(super) fn rail(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
-        let shown = self.sidebar_visible && !self.show_settings;
+        let shown = self.sidebar_visible;
         let mut rail = div()
             .w(px(48.))
             .h_full()
