@@ -79,6 +79,14 @@ impl Workspace {
             )
     }
 
+    /// The first add-on bottom panel that is open, drawn under the editor.
+    fn bottom_panel(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.registry
+            .running()
+            .find_map(|(_, inst)| inst.bottom_panel(cx))
+            .map(IntoElement::into_any_element)
+    }
+
     fn content(&self, right: bool, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         if self.show_settings {
             return self.settings_view(t, cx).into_any_element();
@@ -155,27 +163,35 @@ impl Workspace {
             .into_any_element()
     }
 
-    /// The editor area: one column, or two side by side while split.
+    /// The editor area: one column, or two side by side while split, with the
+    /// add-on bottom panel under all of it.
     fn editor_area(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        if self.show_settings || !self.is_split() {
-            return div()
+        let columns = if self.show_settings || !self.is_split() {
+            div()
                 .flex_1()
-                .min_w_0()
+                .min_h_0()
                 .flex()
                 .flex_col()
-                .relative()
                 .child(self.tab_bar(false, t, cx))
                 .child(div().flex_1().min_h_0().child(self.content(false, t, cx)))
-                .children(self.toast(t, cx))
-                .into_any_element();
-        }
+                .into_any_element()
+        } else {
+            div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .child(self.group_column(false, t, cx))
+                .child(self.group_column(true, t, cx))
+                .into_any_element()
+        };
         div()
             .flex_1()
             .min_w_0()
             .flex()
+            .flex_col()
             .relative()
-            .child(self.group_column(false, t, cx))
-            .child(self.group_column(true, t, cx))
+            .child(columns)
+            .when_some(self.bottom_panel(cx), |d, panel| d.child(panel))
             .children(self.toast(t, cx))
             .into_any_element()
     }
@@ -205,6 +221,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_reopen_tab))
             .on_action(cx.listener(Self::on_split_right))
             .on_action(cx.listener(Self::on_search_everywhere))
+            .on_action(cx.listener(Self::on_toggle_terminal))
             .on_action(cx.listener(Self::on_save))
             .on_action(cx.listener(Self::on_quit))
             .relative()

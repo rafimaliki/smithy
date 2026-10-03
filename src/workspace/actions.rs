@@ -2,11 +2,32 @@
 use super::Workspace;
 use crate::actions::{
     CloseTab, NextTab, OpenFolder, PrevTab, Quit, ReopenTab, Save, SearchEverywhere, SplitRight,
-    ToggleSidebar,
+    ToggleSidebar, ToggleTerminal,
 };
+use crate::editor::view::EditorEvent;
 use gpui::{Context, Window};
 
 impl Workspace {
+    /// The editor asked to navigate (Ctrl+Click, F12, Shift+F12, Alt+Left/Right):
+    /// the first add-on that knows what to do with it takes it.
+    pub(crate) fn on_editor_navigate(
+        &mut self,
+        event: &EditorEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let EditorEvent::Navigate {
+            what,
+            path,
+            line,
+            character,
+        } = event;
+        for (_, instance) in self.registry.running() {
+            if instance.navigate(*what, path, *line, *character, window, cx) {
+                break;
+            }
+        }
+    }
     pub(crate) fn on_toggle_sidebar(
         &mut self,
         _: &ToggleSidebar,
@@ -84,6 +105,19 @@ impl Workspace {
     ) {
         for (_, inst) in self.registry.running() {
             inst.toggle_search_everywhere(window, cx);
+        }
+        cx.notify();
+    }
+
+    /// Ctrl+backtick: hand the key to the add-on that owns the bottom panel.
+    pub(crate) fn on_toggle_terminal(
+        &mut self,
+        _: &ToggleTerminal,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for (_, inst) in self.registry.running() {
+            inst.toggle_bottom_panel(window, cx);
         }
         cx.notify();
     }

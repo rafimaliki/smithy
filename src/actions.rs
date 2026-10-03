@@ -28,9 +28,15 @@ actions!(
         Paste,
         SelectAll,
         Save,
+        Find,
         ToggleBlame,
         ToggleWrap,
-        // View
+        // Answered by the Language servers add-on; they do nothing while it is off.
+        GoToDefinition,
+        FindReferences,
+        NavBack,
+        NavForward,
+        // workspace
         ToggleSidebar,
         OpenFolder,
         CloseTab,
@@ -42,6 +48,8 @@ actions!(
         Quit,
         // Handled by the Search add-on; does nothing while it is off.
         SearchEverywhere,
+        // Handled by the Terminal add-on; does nothing while it is off.
+        ToggleTerminal,
         // Handled by the add-on that owns the tab's document view.
         TogglePreview,
     ]

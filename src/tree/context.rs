@@ -136,6 +136,24 @@ impl TreeView {
         );
         rows.push(menu::separator(t).into_any_element());
 
+        // Only when the Terminal add-on is on; its menus are hidden while it is off.
+        if is_dir
+            && cx
+                .global::<crate::settings::Settings>()
+                .addon_enabled("terminal")
+        {
+            let dir = path.clone();
+            rows.push(
+                menu::item("m-terminal", "Open in Terminal", None, false, true, t)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.menu = None;
+                        cx.emit(TreeEvent::OpenTerminal(dir.clone()));
+                        cx.notify();
+                    }))
+                    .into_any_element(),
+            );
+        }
+
         let reveal = path.clone();
         rows.push(
             menu::item("m-reveal", "Reveal in File Explorer", None, false, true, t)

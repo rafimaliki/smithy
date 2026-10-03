@@ -9,6 +9,7 @@
 //! [`all`]. `image_viewer.rs` is the reference.
 mod deps;
 pub mod image_viewer;
+pub mod lsp;
 pub mod markdown;
 pub mod pdf;
 pub mod pull_requests;
@@ -16,6 +17,7 @@ mod registry;
 pub mod search;
 pub mod source_control;
 pub mod split_panes;
+pub mod terminal;
 
 pub use deps::{resolve_disable, resolve_enable};
 pub use registry::Registry;
@@ -83,6 +85,42 @@ pub struct StatusInfo {
     pub detail: String,
 }
 
+/// A navigation gesture in the editor that an add-on may answer.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Navigate {
+    /// Ctrl+Click, or F12.
+    Definition,
+    /// Shift+F12, or Ctrl+Click on a definition.
+    References,
+    /// Alt+Left.
+    Back,
+    /// Alt+Right.
+    Forward,
+}
+
+/// How far a language server is, as Settings > Languages shows it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ServerState {
+    /// On and found on PATH.
+    On,
+    /// Off in Settings > Languages.
+    Off,
+    /// On, but the command is not on PATH.
+    NotInstalled,
+}
+
+/// One row an add-on contributes to Settings > Languages.
+#[derive(Clone)]
+pub struct LanguageServerRow {
+    /// Id `toggle_language_server` takes.
+    pub id: &'static str,
+    /// Language name, matching `editor::lang::Lang::name`.
+    pub language: &'static str,
+    /// Command shown in the Language server column.
+    pub server: &'static str,
+    pub state: ServerState,
+}
+
 pub trait Addon {
     fn info(&self) -> AddonInfo;
     /// Build the running add-on. Called once when it is turned on.
@@ -123,6 +161,15 @@ pub trait AddonInstance {
     }
     /// Ctrl+Shift+O reached the workspace: open or close the add-on's overlay.
     fn toggle_search_everywhere(&self, _window: &mut Window, _cx: &mut App) {}
+    /// The add-on's view for the bottom panel, or `None` while it has none open.
+    /// The core draws it under the editor, above the status bar.
+    fn bottom_panel(&self, _cx: &App) -> Option<AnyView> {
+        None
+    }
+    /// Ctrl+backtick reached the workspace: show or hide the bottom panel.
+    fn toggle_bottom_panel(&self, _window: &mut Window, _cx: &mut App) {}
+    /// The explorer asked to open a terminal in `dir` (folder menu).
+    fn open_terminal_at(&self, _dir: &Path, _window: &mut Window, _cx: &mut App) {}
     /// A view that wraps the tab's editor for `path`, or `None` to leave the tab alone.
     /// The core keeps the editor (saving, dirty state and the unsaved prompt are
     /// unchanged) and renders this view instead of it; the view draws its own chrome
@@ -141,17 +188,39 @@ pub trait AddonInstance {
     fn enables_split(&self) -> bool {
         false
     }
+    /// The editor saw a navigation gesture at `path`, `line`, `character` (0-based;
+    /// `character` in UTF-16 units). Return true when the add-on took it. Back and
+    /// forward carry no position, so ignore the last three there.
+    fn navigate(
+        &self,
+        _what: Navigate,
+        _path: &Path,
+        _line: u32,
+        _character: u32,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> bool {
+        false
+    }
+    /// Per-language server rows for Settings > Languages. Empty while the add-on is off.
+    fn language_servers(&self) -> Vec<LanguageServerRow> {
+        Vec::new()
+    }
+    /// Settings > Languages: turn the server for `id` on or off.
+    fn toggle_language_server(&self, _id: &str, _cx: &mut App) {}
 }
 
 /// Every add-on Smithy ships. One line per add-on.
 pub fn all() -> Vec<Box<dyn Addon>> {
     vec![
         Box::new(image_viewer::ImageViewer),
+        Box::new(lsp::LanguageServers),
         Box::new(markdown::Markdown),
         Box::new(pdf::PdfViewer),
         Box::new(pull_requests::PullRequests),
         Box::new(search::Search),
         Box::new(source_control::SourceControl),
         Box::new(split_panes::SplitPanes),
+        Box::new(terminal::Terminal),
     ]
 }
