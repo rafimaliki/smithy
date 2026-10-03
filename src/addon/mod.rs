@@ -11,6 +11,7 @@ mod deps;
 pub mod image_viewer;
 pub mod markdown;
 mod registry;
+pub mod search;
 pub mod source_control;
 
 pub use deps::{resolve_disable, resolve_enable};
@@ -138,6 +139,7 @@ pub fn all() -> Vec<Box<dyn Addon>> {
     vec![
         Box::new(image_viewer::ImageViewer),
         Box::new(markdown::Markdown),
+        Box::new(search::Search),
         Box::new(source_control::SourceControl),
     ]
 }
