@@ -107,6 +107,17 @@ pub const CATALOG: &[Shortcut] = &[
     s!(Enter, "New line", "Editor", "enter", EDITOR),
     s!(Tab, "Indent", "Editor", "tab", EDITOR),
     s!(ToggleBlame, "Toggle blame", "Editor", "ctrl-alt-b", EDITOR),
+    // Answered by the Language servers add-on.
+    s!(GoToDefinition, "Go to definition", "Editor", "f12", EDITOR),
+    s!(
+        FindReferences,
+        "Find references",
+        "Editor",
+        "shift-f12",
+        EDITOR
+    ),
+    s!(NavBack, "Go back", "Editor", "alt-left", EDITOR),
+    s!(NavForward, "Go forward", "Editor", "alt-right", EDITOR),
 ];
 
 fn shortcut(action: &str) -> Option<&'static Shortcut> {
