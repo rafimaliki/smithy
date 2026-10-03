@@ -1,6 +1,5 @@
 //! Workbench chrome: activity rail, tab bar, status bar, unsaved-changes prompt.
 use super::{Sidebar, TabContent, Workspace};
-use crate::editor::lang::language_for;
 use crate::theme::{on_accent, Theme};
 use gpui::{
     div, prelude::*, px, AnyElement, Context, MouseButton, MouseDownEvent, SharedString, Stateful,
@@ -83,6 +82,7 @@ impl Workspace {
             rail_button("rail-settings", "S", self.show_settings, t).on_click(cx.listener(
                 |this, _, _, cx| {
                     this.show_settings = !this.show_settings;
+                    this.capture = None;
                     cx.notify();
                 },
             )),
@@ -196,7 +196,7 @@ impl Workspace {
                     right = right.child("Read-only");
                 }
             }
-            right = right.child(language_for(&tab.path)).child("UTF-8");
+            right = right.child(self.status_language(t, cx)).child("UTF-8");
         }
         let folder = self
             .folder

@@ -1,23 +1,25 @@
-//! The editing surface: a virtualized, monospace line list with caret and selection.
+//! The editing surface: caret, selection and input. Drawing a line lives in
+//! `view/rows.rs` so this file stays about state.
 //! ponytail: no IME, no horizontal scroll, no wrap yet (word wrap is a core task in
 //! docs/tasks.md); upgrade: EntityInputHandler for IME, per-line shaped text.
-use super::layout::{col_at_visual, expand_tabs, visual_col};
+mod rows;
+
+use super::highlight::Highlighter;
+use super::lang::Lang;
+use super::layout::col_at_visual;
 use super::state::EditorState;
 use crate::actions::*;
-use crate::addon::{BlameLine, EditorDecorations, LineMark};
+use crate::addon::EditorDecorations;
 use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
-    canvas, div, font, prelude::*, px, AnyElement, Bounds, ClipboardItem, Context, FocusHandle,
-    Focusable, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Render,
-    ScrollStrategy, SharedString, UniformListScrollHandle, Window,
+    canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
+    KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
-use std::ops::Range;
 
 pub const MONO: &str = "Cascadia Mono";
 const LINE_H: f32 = 21.0;
 const GUTTER: f32 = 64.0;
-const BLAME_W: f32 = 170.0;
 
 pub struct EditorView {
     pub state: EditorState,
@@ -29,6 +31,12 @@ pub struct EditorView {
     decorations: EditorDecorations,
     /// Ctrl+Alt+B: show the full blame column instead of the caret-line label.
     blame_column: bool,
+    /// The file's language: detected from the extension, or the picker's override.
+    lang: Option<Lang>,
+    /// `None` for plain text and for large files, which skip highlighting.
+    highlighter: Option<Highlighter>,
+    /// Buffer revision the spans were built from; `u64::MAX` forces the first pass.
+    hl_revision: u64,
 }
 
 impl Focusable for EditorView {
@@ -39,6 +47,13 @@ impl Focusable for EditorView {
 
 impl EditorView {
     pub fn new(state: EditorState, cx: &mut Context<Self>) -> Self {
+        // Large (read-only) files still show their language, but skip highlighting.
+        let lang = state.path.as_deref().and_then(Lang::for_path);
+        let highlighter = if state.read_only {
+            None
+        } else {
+            lang.and_then(Highlighter::new)
+        };
         Self {
             state,
             focus: cx.focus_handle(),
@@ -47,6 +62,9 @@ impl EditorView {
             char_w: 8.0,
             decorations: EditorDecorations::default(),
             blame_column: false,
+            lang,
+            highlighter,
+            hl_revision: u64::MAX,
         }
     }
 
@@ -64,6 +82,36 @@ impl EditorView {
         window.focus(&self.focus);
     }
 
+    /// The language shown in the status bar, override included.
+    pub fn lang(&self) -> Option<Lang> {
+        self.lang
+    }
+
+    /// Language picker choice for this file; `None` means plain text.
+    pub fn set_lang(&mut self, lang: Option<Lang>, cx: &mut Context<Self>) {
+        self.lang = lang;
+        self.highlighter = if self.state.read_only {
+            None
+        } else {
+            lang.and_then(Highlighter::new)
+        };
+        self.hl_revision = u64::MAX;
+        cx.notify();
+    }
+
+    /// Re-parse when the buffer changed; incremental after the first parse.
+    // ponytail: the whole buffer is materialized per edit to feed the parser;
+    // upgrade: hand tree-sitter the rope's chunks via a TextProvider.
+    fn refresh_highlight(&mut self) {
+        let rev = self.state.buffer.revision;
+        if let Some(h) = self.highlighter.as_mut() {
+            if rev != self.hl_revision {
+                h.update(&self.state.buffer.text());
+                self.hl_revision = rev;
+            }
+        }
+    }
+
     /// Write the buffer to its path and clear the dirty mark.
     pub fn save(&mut self, cx: &mut Context<Self>) -> std::io::Result<()> {
         if let Some(path) = self.state.path.clone() {
@@ -75,6 +123,7 @@ impl EditorView {
     }
 
     fn changed(&mut self, cx: &mut Context<Self>) {
+        self.refresh_highlight();
         self.reveal_cursor();
         cx.notify();
     }
@@ -97,126 +146,6 @@ impl EditorView {
         self.state
             .set_cursor_line_col(line, col_at_visual(&text, vcol), extend);
         cx.notify();
-    }
-
-    fn rows(
-        &mut self,
-        range: Range<usize>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Vec<gpui::Stateful<gpui::Div>> {
-        let theme = Theme::by_name(&cx.global::<Settings>().theme);
-        let focused = self.focus.is_focused(window);
-        let (cursor_line, cursor_col) = self.state.line_col(self.state.cursor);
-        let (sel_a, sel_b) = self.state.selection();
-        let char_w = self.char_w;
-        let blame_column = self.blame_column;
-        let decorations = &self.decorations;
-        range
-            .map(|i| {
-                let text = self.state.buffer.line(i);
-                let start = self.state.buffer.line_start(i);
-                let len = text.chars().count();
-                let mut row = div()
-                    .id(("line", i))
-                    .relative()
-                    .flex()
-                    .h(px(LINE_H))
-                    .w_full()
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, e: &MouseDownEvent, window, cx| {
-                            this.focus(window);
-                            this.click(i, e.position.x, e.modifiers.shift, cx);
-                        }),
-                    )
-                    .on_mouse_move(cx.listener(move |this, e: &MouseMoveEvent, _, cx| {
-                        if e.pressed_button == Some(MouseButton::Left) {
-                            this.click(i, e.position.x, true, cx);
-                        }
-                    }))
-                    .when(blame_column, |d| {
-                        // Only the first line of a commit group carries the label.
-                        let blame = match blame_group_start(&decorations.blame, i) {
-                            true => decorations.blame.get(i).and_then(|b| b.as_ref()),
-                            false => None,
-                        };
-                        d.child(blame_cell(blame, &theme))
-                    })
-                    .child(
-                        div()
-                            .w(px(GUTTER))
-                            .flex_none()
-                            .pr(px(18.))
-                            .text_right()
-                            .text_color(theme.mute)
-                            .opacity(0.6)
-                            .child(SharedString::from((i + 1).to_string())),
-                    )
-                    .when_some(
-                        mark_color(decorations.marks.get(i).copied().flatten(), &theme),
-                        |d, color| {
-                            d.child(
-                                div()
-                                    .absolute()
-                                    .left(px(48.))
-                                    .top(px(1.))
-                                    .bottom(px(1.))
-                                    .w(px(3.))
-                                    .rounded(px(2.))
-                                    .bg(color),
-                            )
-                        },
-                    );
-                let mut body = div().relative().flex_1().h_full().overflow_hidden();
-                // Selection part on this line (a selected line break extends one cell).
-                if sel_a != sel_b && sel_a <= start + len && sel_b > start {
-                    let from = sel_a.saturating_sub(start).min(len);
-                    let to = (sel_b - start).min(len + 1);
-                    let v0 = visual_col(&text, from);
-                    let v1 = if to > len {
-                        visual_col(&text, len) + 1
-                    } else {
-                        visual_col(&text, to)
-                    };
-                    body = body.child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .h_full()
-                            .left(px(v0 as f32 * char_w))
-                            .w(px((v1 - v0) as f32 * char_w))
-                            .bg(theme.sel)
-                            .border_1()
-                            .border_color(theme.acc)
-                            .opacity(0.5),
-                    );
-                }
-                body = body.child(
-                    div()
-                        .whitespace_nowrap()
-                        .child(SharedString::from(expand_tabs(&text))),
-                );
-                if !blame_column && i == cursor_line {
-                    if let Some(Some(blame)) = decorations.blame.get(i) {
-                        body = body.child(inline_blame(blame, &theme));
-                    }
-                }
-                if focused && i == cursor_line {
-                    body = body.child(
-                        div()
-                            .absolute()
-                            .top(px(2.))
-                            .h(px(LINE_H - 4.))
-                            .w(px(2.))
-                            .left(px(visual_col(&text, cursor_col) as f32 * char_w))
-                            .bg(theme.acc),
-                    );
-                }
-                row = row.child(body);
-                row
-            })
-            .collect()
     }
 
     fn key_down(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -287,62 +216,6 @@ impl EditorView {
             s.insert(&text.replace("\r\n", "\n"));
         }
     });
-}
-
-/// True when line `i` starts a run of lines from the same commit.
-fn blame_group_start(blame: &[Option<BlameLine>], i: usize) -> bool {
-    if i == 0 {
-        return true;
-    }
-    match (blame.get(i - 1), blame.get(i)) {
-        (Some(Some(a)), Some(Some(b))) => {
-            a.author != b.author || a.age != b.age || a.subject != b.subject
-        }
-        _ => true,
-    }
-}
-
-/// A three-column blame label: author and age on the first line of a group.
-fn blame_cell(blame: Option<&BlameLine>, theme: &Theme) -> AnyElement {
-    div()
-        .w(px(BLAME_W))
-        .flex_none()
-        .pr(px(8.))
-        .overflow_hidden()
-        .whitespace_nowrap()
-        .font_family("Segoe UI")
-        .text_size(px(11.))
-        .text_color(theme.mute)
-        .opacity(0.85)
-        .child(SharedString::from(match blame {
-            Some(b) => format!("{} · {}", b.author, b.age),
-            None => String::new(),
-        }))
-        .into_any_element()
-}
-
-fn inline_blame(blame: &BlameLine, theme: &Theme) -> AnyElement {
-    div()
-        .ml(px(28.))
-        .flex_none()
-        .whitespace_nowrap()
-        .font_family("Segoe UI")
-        .text_size(px(12.))
-        .text_color(theme.mute)
-        .opacity(0.75)
-        .child(SharedString::from(format!(
-            "{}, {} · {}",
-            blame.author, blame.age, blame.subject
-        )))
-        .into_any_element()
-}
-
-fn mark_color(mark: Option<LineMark>, theme: &Theme) -> Option<gpui::Rgba> {
-    match mark {
-        Some(LineMark::Added) => Some(theme.add),
-        Some(LineMark::Modified) => Some(theme.acc),
-        None => None,
-    }
 }
 
 impl Render for EditorView {

@@ -1,8 +1,12 @@
 //! The window's root view: open folder, tabs, sidebar, add-on registry.
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
 mod chrome;
+mod lang_menu;
 mod launch;
 mod render;
+mod settings_languages;
+mod settings_shortcuts;
+mod settings_shortcuts_view;
 mod settings_view;
 pub mod tab_set;
 
@@ -18,6 +22,8 @@ use gpui::{
     AnyView, Context, Entity, FocusHandle, Focusable, PathPromptOptions, SharedString,
     Subscription, Window,
 };
+use settings_shortcuts::Capture;
+use settings_view::SettingsSection;
 use std::path::{Path, PathBuf};
 use tab_set::TabSet;
 
@@ -50,10 +56,20 @@ pub struct Workspace {
     /// Raw sidebar width while the divider is being dragged.
     pub(crate) drag: Option<f32>,
     pub(crate) show_settings: bool,
+    /// The status-bar language picker is open.
+    pub(crate) lang_menu: bool,
+    /// Which settings section the pane shows.
+    pub(crate) settings_section: SettingsSection,
+    /// What the settings page is taking keys for, if anything.
+    pub(crate) capture: Option<Capture>,
+    /// Text in the shortcuts search field.
+    pub(crate) shortcut_filter: String,
     /// Tab waiting on the unsaved-changes prompt.
     pub(crate) pending_close: Option<usize>,
     pub(crate) error: Option<SharedString>,
     focus: FocusHandle,
+    /// Keeps the keystroke interceptor alive for the window's life.
+    _capture_sub: Subscription,
 }
 
 impl Focusable for Workspace {
@@ -64,6 +80,17 @@ impl Focusable for Workspace {
 
 impl Workspace {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        let handle = cx.entity();
+        let capture_sub = cx.intercept_keystrokes(move |e, _window, cx| {
+            let active = handle.read_with(cx, |this, _| this.capture.is_some());
+            if !active {
+                return;
+            }
+            let consumed = handle.update(cx, |this, cx| this.on_captured_key(&e.keystroke, cx));
+            if consumed {
+                cx.stop_propagation();
+            }
+        });
         Self {
             folder: None,
             registry: Registry::new(),
@@ -74,9 +101,14 @@ impl Workspace {
             sidebar_visible: true,
             drag: None,
             show_settings: false,
+            lang_menu: false,
+            settings_section: SettingsSection::Appearance,
+            capture: None,
+            shortcut_filter: String::new(),
             pending_close: None,
             error: None,
             focus: cx.focus_handle(),
+            _capture_sub: capture_sub,
         }
     }
 
@@ -123,6 +155,7 @@ impl Workspace {
         self.sidebar = Sidebar::Files;
         self.sidebar_visible = true;
         self.show_settings = false;
+        self.lang_menu = false;
         let tree = cx.new(|_| TreeView::new(path.clone()));
         self.tree_sub =
             Some(
@@ -334,6 +367,9 @@ impl Workspace {
     /// Rail click: the active view collapses the sidebar, another view shows it.
     pub(crate) fn select_sidebar(&mut self, s: Sidebar, cx: &mut Context<Self>) {
         let leaving_settings = std::mem::take(&mut self.show_settings);
+        if leaving_settings {
+            self.capture = None;
+        }
         if self.sidebar == s && self.sidebar_visible && !leaving_settings {
             self.sidebar_visible = false;
         } else {

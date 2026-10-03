@@ -37,5 +37,7 @@ actions!(
         PrevTab,
         ReopenTab,
         Quit,
+        // Handled by the add-on that owns the tab's document view.
+        TogglePreview,
     ]
 );
