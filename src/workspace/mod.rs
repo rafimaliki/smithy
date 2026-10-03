@@ -19,6 +19,7 @@ mod tab_prompt;
 pub mod tab_set;
 mod tabs;
 mod tabs_view;
+mod title_bar;
 pub(crate) mod watch;
 
 use crate::addon::{AddonContext, Registry};
@@ -81,6 +82,8 @@ pub struct Workspace {
     /// Raw sidebar width while the divider is being dragged.
     pub(crate) drag: Option<f32>,
     pub(crate) show_settings: bool,
+    /// The custom title bar is showing (pointer near the top edge).
+    pub(crate) title_bar: bool,
     /// The status-bar language picker is open.
     pub(crate) lang_menu: bool,
     /// Which settings section the pane shows.
@@ -143,6 +146,7 @@ impl Workspace {
             sidebar_visible: true,
             drag: None,
             show_settings: false,
+            title_bar: false,
             lang_menu: false,
             settings_section: SettingsSection::Appearance,
             github_settings: None,

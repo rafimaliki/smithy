@@ -50,6 +50,8 @@ fn window_options(cx: &App) -> WindowOptions {
         window_min_size: Some(size(px(640.), px(420.))),
         titlebar: Some(TitlebarOptions {
             title: Some("Smithy".into()),
+            // Hides the native title bar; `workspace/title_bar.rs` draws our own.
+            appears_transparent: true,
             ..Default::default()
         }),
         ..Default::default()

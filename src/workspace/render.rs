@@ -229,10 +229,15 @@ impl Render for Workspace {
             .bg(t.bg)
             .text_color(t.ink)
             .font_family("Segoe UI")
-            .text_size(px(13.));
+            .text_size(px(13.))
+            .on_mouse_move(
+                cx.listener(|this, e: &MouseMoveEvent, _, cx| this.track_title_bar(e, cx)),
+            );
 
         if self.folder.is_none() {
-            return root.child(self.launch(&t, cx));
+            return root
+                .child(self.launch(&t, cx))
+                .children(self.title_bar(&t, cx));
         }
 
         let saved_width = cx.global::<crate::settings::Settings>().sidebar_width;
@@ -287,6 +292,7 @@ impl Render for Workspace {
                 )
                 .child(self.status_bar(&t, cx)),
         )
+        .children(self.title_bar(&t, cx))
         .children(self.lang_menu(&t, cx))
         .children(self.tab_menu(&t, cx))
         .children(self.addon_overlay(cx))
