@@ -54,9 +54,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(p) = self.tabs.pop_closed() {
-            self.open_file(&p, window, cx);
-        }
+        self.reopen_last(window, cx);
     }
 
     /// Ctrl+Shift+O: hand the key to the add-on that owns Search everywhere.

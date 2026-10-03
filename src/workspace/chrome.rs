@@ -1,9 +1,9 @@
-//! Workbench chrome: activity rail, tab bar, status bar, unsaved-changes prompt.
+//! Workbench chrome: the activity rail and the status bar. The tab bar, its menu,
+//! the reopen toast and the unsaved-changes prompt live in `tabs_view.rs`.
 use super::{Sidebar, TabContent, Workspace};
 use crate::theme::{on_accent, Theme};
 use gpui::{
     div, prelude::*, px, AnyElement, Context, MouseButton, MouseDownEvent, SharedString, Stateful,
-    Window,
 };
 
 fn rail_button(id: &'static str, glyph: &'static str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
@@ -97,102 +97,6 @@ impl Workspace {
         )
     }
 
-    pub(super) fn tab_bar(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut bar = div()
-            .h(px(36.))
-            .flex_none()
-            .flex()
-            .bg(t.side)
-            .border_b_1()
-            .border_color(t.line);
-        for (i, tab) in self.tabs.tabs.iter().enumerate() {
-            let active = i == self.tabs.active && !self.show_settings;
-            let dirty = self.is_dirty(i, cx);
-            let pinned = tab.pinned;
-            let name: SharedString = match &tab.content {
-                TabContent::Addon { title, .. } => title.clone(),
-                _ => tab
-                    .path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default()
-                    .into(),
-            };
-            let group: SharedString = format!("tab-{i}").into();
-            let slot = div()
-                .relative()
-                .w(px(16.))
-                .h(px(16.))
-                .ml(px(4.))
-                .flex_none()
-                .child(
-                    div()
-                        .absolute()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .when(dirty, |d| {
-                            d.child(div().size(px(6.)).rounded_full().bg(t.acc))
-                        })
-                        .group_hover(group.clone(), |d| d.invisible()),
-                )
-                .child(
-                    div()
-                        .id(("close", i))
-                        .absolute()
-                        .size_full()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_color(t.mute)
-                        .when(!dirty, |d| d.invisible())
-                        .group_hover(group.clone(), |d| d.visible().text_color(t.ink))
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |this, _: &MouseDownEvent, window, cx| {
-                                cx.stop_propagation();
-                                this.request_close(i, window, cx)
-                            }),
-                        )
-                        .child("×"),
-                );
-            bar = bar.child(
-                div()
-                    .id(("tab", i))
-                    .group(group)
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .h_full()
-                    .px(px(14.))
-                    .cursor_pointer()
-                    .text_color(if active { t.ink } else { t.mute })
-                    .when(active, |d| d.bg(t.bg).border_t_1().border_color(t.acc))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _: &MouseDownEvent, window, cx| {
-                            this.show_settings = false;
-                            this.tabs.active = i;
-                            this.focus_tab(window, cx);
-                        }),
-                    )
-                    .on_mouse_down(
-                        MouseButton::Right,
-                        // ponytail: right-click toggles pin until the tab context menu lands.
-                        cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                            this.tabs.toggle_pin(i);
-                            cx.notify();
-                        }),
-                    )
-                    .when(pinned, |d| d.child(div().text_color(t.acc).child("▪")))
-                    .child(name)
-                    .when(!pinned, |d| d.child(slot)),
-            );
-        }
-        bar
-    }
-
     pub(super) fn status_bar(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let mut right = div().ml_auto().flex().gap(px(18.));
         if let Some(tab) = self.tabs.active_tab() {
@@ -263,91 +167,5 @@ impl Workspace {
             d.child(div().text_color(t.del).child(e))
         })
         .child(right)
-    }
-
-    /// Modal shown when closing a tab with unsaved edits.
-    pub(super) fn unsaved_prompt(&self, t: &Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let i = self.pending_close?;
-        let name = self
-            .tabs
-            .tabs
-            .get(i)?
-            .path
-            .file_name()?
-            .to_string_lossy()
-            .into_owned();
-        let button = |id: &'static str, label: &'static str, primary: bool| {
-            div()
-                .id(id)
-                .px(px(14.))
-                .py(px(6.))
-                .rounded(px(4.))
-                .cursor_pointer()
-                .border_1()
-                .border_color(t.line)
-                .when(primary, |d| {
-                    d.bg(t.acc).text_color(on_accent()).border_color(t.acc)
-                })
-                .when(!primary, |d| d.hover(|d| d.bg(t.hov)))
-                .child(label)
-        };
-        Some(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(gpui::rgba(0x00000099))
-                .occlude()
-                .child(
-                    div()
-                        .w(px(420.))
-                        .p(px(20.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(14.))
-                        .bg(t.side)
-                        .border_1()
-                        .border_color(t.line)
-                        .rounded(px(8.))
-                        .text_color(t.ink)
-                        .child(
-                            div()
-                                .text_size(px(15.))
-                                .child(format!("Save changes to {name}?")),
-                        )
-                        .child(
-                            div()
-                                .text_color(t.mute)
-                                .child("Your changes will be lost if you don't save them."),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .justify_end()
-                                .gap(px(8.))
-                                .child(button("cancel", "Cancel", false).on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.pending_close = None;
-                                        cx.notify();
-                                    },
-                                )))
-                                .child(button("discard", "Don't save", false).on_click(
-                                    cx.listener(|this, _, window: &mut Window, cx| {
-                                        this.resolve_close(false, window, cx)
-                                    }),
-                                ))
-                                .child(button("save", "Save", true).on_click(cx.listener(
-                                    |this, _, window: &mut Window, cx| {
-                                        this.resolve_close(true, window, cx)
-                                    },
-                                ))),
-                        ),
-                )
-                .into_any_element(),
-        )
     }
 }

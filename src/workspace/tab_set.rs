@@ -26,6 +26,18 @@ impl<C> Default for TabSet<C> {
 
 const MAX_CLOSED: usize = 20;
 
+/// A bulk close from the tab context menu. Pinned tabs are skipped by all three,
+/// so a pinned tab never disappears from a menu that names a neighbouring tab.
+#[derive(Clone, Copy, PartialEq)]
+pub enum CloseGroup {
+    /// Every tab but this one.
+    Others,
+    /// Every tab after this one.
+    Right,
+    /// Every tab.
+    All,
+}
+
 impl<C> TabSet<C> {
     pub fn active_tab(&self) -> Option<&Tab<C>> {
         self.tabs.get(self.active)
@@ -106,6 +118,20 @@ impl<C> TabSet<C> {
             self.active = self.tabs.len().saturating_sub(1);
         }
         before - self.tabs.len()
+    }
+
+    /// Which tabs a tab-menu bulk close takes. Pinned tabs are never included.
+    pub fn close_targets(&self, group: CloseGroup, i: usize) -> Vec<usize> {
+        (0..self.tabs.len())
+            .filter(|&j| {
+                !self.tabs[j].pinned
+                    && match group {
+                        CloseGroup::All => true,
+                        CloseGroup::Others => j != i,
+                        CloseGroup::Right => j > i,
+                    }
+            })
+            .collect()
     }
 
     /// Pin or unpin; pinned tabs sit at the left, the toggled tab lands on the
@@ -214,5 +240,33 @@ mod tests {
         assert_eq!(s.active, 0);
         // Deleted files are not offered for reopen.
         assert_eq!(s.pop_closed(), None);
+    }
+
+    #[test]
+    fn bulk_close_skips_pinned_tabs() {
+        // d is pinned, so it sits first and no group ever names it.
+        let mut s = set(&["a", "b", "c", "d"]);
+        s.toggle_pin(3); // [d, a, b, c]
+        assert_eq!(s.close_targets(CloseGroup::All, 1), vec![1, 2, 3]);
+        assert_eq!(s.close_targets(CloseGroup::Others, 2), vec![1, 3]);
+        assert_eq!(s.close_targets(CloseGroup::Right, 1), vec![2, 3]);
+        assert!(s.close_targets(CloseGroup::Right, 3).is_empty());
+    }
+
+    #[test]
+    fn bulk_close_indices_stay_valid_when_removed_from_the_end() {
+        // The caller closes highest-first, so each removal only shifts indices that
+        // are already gone.
+        let mut s = set(&["a", "b", "c", "d", "e"]);
+        let targets = s.close_targets(CloseGroup::All, 0);
+        assert_eq!(targets, vec![0, 1, 2, 3, 4]);
+        for i in targets.into_iter().rev() {
+            let name = order(&s)[i].clone();
+            s.close(i);
+            assert_eq!(s.position(Path::new(&name)), None);
+        }
+        assert!(s.tabs.is_empty());
+        // Closing remembers each one for reopen.
+        assert_eq!(s.pop_closed(), Some(PathBuf::from("a")));
     }
 }
