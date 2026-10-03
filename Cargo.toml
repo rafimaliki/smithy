@@ -32,6 +32,11 @@ windows = { version = "0.57", features = [
     "Win32_System_Com",
 ] }
 
+# Terminal add-on: a ConPTY per session (`portable-pty`) and a small pure-Rust
+# VT parser (`vte`) feeding our own grid. `async-channel` above carries the wake-ups.
+portable-pty = "0.9"
+vte = "0.15"
+
 # Syntax highlighting: one grammar per language, compiled in and loaded when a
 # file of that type opens. `tree-sitter` is the runtime; the rest are grammars
 # (tiny C files, no extra build tools beyond the MSVC one the app already needs).
