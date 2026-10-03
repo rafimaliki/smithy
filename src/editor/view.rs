@@ -2,6 +2,7 @@
 //! `view/rows.rs`, wrap and horizontal scroll in `view/wrap.rs`; the gutter and
 //! blame live in `view/gutter.rs`, and the Ctrl+F bar in `view/find_bar.rs`.
 //! ponytail: no IME; upgrade: EntityInputHandler for IME, per-line shaped text.
+mod blink;
 mod find_bar;
 mod gutter;
 mod input;
@@ -18,12 +19,13 @@ use crate::actions::*;
 use crate::addon::{EditorDecorations, Navigate};
 use crate::settings::Settings;
 use crate::theme::Theme;
+use blink::Blink;
 use gpui::{
     canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, EventEmitter, FocusHandle,
     Focusable, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
 use std::path::PathBuf;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 pub const MONO: &str = "Cascadia Mono";
 const LINE_H: f32 = 21.0;
@@ -63,6 +65,8 @@ pub struct EditorView {
     find: Option<FindState>,
     /// Buffer revision the matches were built from.
     find_rev: u64,
+    /// Caret blink phase; restarts on every move.
+    blink: Blink,
     /// Alt+Z or the status-bar item flips this; last choice is in `Settings`.
     wrap: bool,
     /// Rows for the buffer at the current width; `None` when wrap is off.
@@ -106,6 +110,21 @@ impl EditorView {
             .and_then(|p| std::fs::metadata(p).ok());
         let size_bytes = on_disk.as_ref().map(|m| m.len()).unwrap_or(0);
         let disk_mtime = on_disk.and_then(|m| m.modified().ok());
+        // Redraw at each blink toggle, only while the editor has focus.
+        cx.spawn(async move |this, cx| loop {
+            let wait = this.update(cx, |this, _| this.blink.until_toggle(Instant::now()));
+            let Ok(wait) = wait else { break };
+            cx.background_executor().timer(wait).await;
+            let alive = this.update(cx, |this, cx| {
+                if this.blink.is_focused() {
+                    cx.notify();
+                }
+            });
+            if alive.is_err() {
+                break;
+            }
+        })
+        .detach();
         Self {
             state,
             focus: cx.focus_handle(),
@@ -119,6 +138,7 @@ impl EditorView {
             hl_revision: u64::MAX,
             find: None,
             find_rev: u64::MAX,
+            blink: Blink::new(),
             wrap,
             wrap_index: None,
             wrap_key: (u64::MAX, 0),
