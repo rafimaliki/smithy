@@ -10,6 +10,7 @@
 mod deps;
 pub mod image_viewer;
 pub mod markdown;
+pub mod pdf;
 pub mod pull_requests;
 mod registry;
 pub mod source_control;
@@ -132,6 +133,7 @@ pub fn all() -> Vec<Box<dyn Addon>> {
     vec![
         Box::new(image_viewer::ImageViewer),
         Box::new(markdown::Markdown),
+        Box::new(pdf::PdfViewer),
         Box::new(pull_requests::PullRequests),
         Box::new(source_control::SourceControl),
     ]

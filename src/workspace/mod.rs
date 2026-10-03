@@ -1,8 +1,10 @@
 //! The window's root view: open folder, tabs, sidebar, add-on registry.
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
 mod chrome;
+mod dialog;
 mod lang_menu;
 mod launch;
+pub(crate) mod menu;
 mod render;
 mod settings_github;
 mod settings_languages;
@@ -70,6 +72,8 @@ pub struct Workspace {
     pub(crate) shortcut_filter: String,
     /// Tab waiting on the unsaved-changes prompt.
     pub(crate) pending_close: Option<usize>,
+    /// Path waiting on the delete-to-Recycle-Bin confirmation.
+    pub(crate) pending_delete: Option<PathBuf>,
     pub(crate) error: Option<SharedString>,
     focus: FocusHandle,
     /// Keeps the keystroke interceptor alive for the window's life.
@@ -111,6 +115,7 @@ impl Workspace {
             capture: None,
             shortcut_filter: String::new(),
             pending_close: None,
+            pending_delete: None,
             error: None,
             focus: cx.focus_handle(),
             _capture_sub: capture_sub,
@@ -157,18 +162,28 @@ impl Workspace {
         self.error = None;
         self.tabs = TabSet::default();
         self.pending_close = None;
+        self.pending_delete = None;
         self.sidebar = Sidebar::Files;
         self.sidebar_visible = true;
         self.show_settings = false;
         self.lang_menu = false;
-        let tree = cx.new(|_| TreeView::new(path.clone()));
-        self.tree_sub =
-            Some(
-                cx.subscribe_in(&tree, window, |this, _, e: &TreeEvent, window, cx| {
-                    let TreeEvent::Open(p) = e;
-                    this.open_file(p, window, cx);
-                }),
-            );
+        let tree = cx.new(|cx| TreeView::new(path.clone(), cx));
+        self.tree_sub = Some(cx.subscribe_in(
+            &tree,
+            window,
+            |this, _, e: &TreeEvent, window, cx| match e {
+                TreeEvent::Open(p) => this.open_file(p, window, cx),
+                TreeEvent::DeleteRequested(p) => {
+                    this.pending_delete = Some(p.clone());
+                    cx.notify();
+                }
+                TreeEvent::Moved { from, to } => this.remap_paths(from, to, cx),
+                TreeEvent::Error(message) => {
+                    this.error = Some(message.clone().into());
+                    cx.notify();
+                }
+            },
+        ));
         self.tree = Some(tree);
         self.folder = Some(path.clone());
         self.update_settings(cx, |s| s.push_recent(path.clone()));
@@ -384,6 +399,21 @@ impl Workspace {
                 self.tabs.open(&path, || TabContent::Addon { view, title });
             }
         }
+        cx.notify();
+    }
+
+    /// A path moved on disk (renamed or cut and pasted): open tabs and their
+    /// editors follow it, so saving writes to the new place.
+    fn remap_paths(&mut self, from: &Path, to: &Path, cx: &mut Context<Self>) {
+        for tab in &self.tabs.tabs {
+            if let Ok(rest) = tab.path.strip_prefix(from) {
+                let new = to.join(rest);
+                if let TabContent::Editor(e, _) = &tab.content {
+                    e.update(cx, |e, _| e.state.path = Some(new));
+                }
+            }
+        }
+        self.tabs.remap_paths(from, to);
         cx.notify();
     }
 

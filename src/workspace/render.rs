@@ -194,5 +194,6 @@ impl Render for Workspace {
         )
         .children(self.lang_menu(&t, cx))
         .children(self.unsaved_prompt(&t, cx))
+        .children(self.delete_dialog(&t, cx))
     }
 }
