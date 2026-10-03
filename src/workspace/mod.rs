@@ -274,6 +274,22 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Open `path` and put the caret on `line` (0-based), scrolling it into view.
+    /// Used by the Search add-on to jump to a result.
+    pub fn open_file_at(
+        &mut self,
+        path: &Path,
+        line: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_file(path, window, cx);
+        if let Some(TabContent::Editor(editor, _)) = self.tabs.active_tab().map(|t| &t.content) {
+            editor.update(cx, |editor, cx| editor.goto_line(line, cx));
+        }
+        self.focus_tab(window, cx);
+    }
+
     fn make_content(
         &mut self,
         path: &Path,

@@ -1,6 +1,8 @@
-//! Keymap action handlers: the small glue from a bound action to the workspace.
+//! Action handlers: one method per workspace action, wired in `render.rs`.
 use super::Workspace;
-use crate::actions::*;
+use crate::actions::{
+    CloseTab, NextTab, OpenFolder, PrevTab, Quit, ReopenTab, Save, SearchEverywhere, ToggleSidebar,
+};
 use gpui::{Context, Window};
 
 impl Workspace {
@@ -55,6 +57,19 @@ impl Workspace {
         if let Some(p) = self.tabs.pop_closed() {
             self.open_file(&p, window, cx);
         }
+    }
+
+    /// Ctrl+Shift+O: hand the key to the add-on that owns Search everywhere.
+    pub(crate) fn on_search_everywhere(
+        &mut self,
+        _: &SearchEverywhere,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for (_, inst) in self.registry.running() {
+            inst.toggle_search_everywhere(window, cx);
+        }
+        cx.notify();
     }
 
     pub(crate) fn on_save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
