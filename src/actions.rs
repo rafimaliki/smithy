@@ -30,13 +30,15 @@ actions!(
         Save,
         ToggleBlame,
         ToggleWrap,
-        // workspace
+        // View
         ToggleSidebar,
         OpenFolder,
         CloseTab,
         NextTab,
         PrevTab,
         ReopenTab,
+        // Handled by the Split panes add-on; does nothing while it is off.
+        SplitRight,
         Quit,
         // Handled by the Search add-on; does nothing while it is off.
         SearchEverywhere,

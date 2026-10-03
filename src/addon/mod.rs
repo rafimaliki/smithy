@@ -15,6 +15,7 @@ pub mod pull_requests;
 mod registry;
 pub mod search;
 pub mod source_control;
+pub mod split_panes;
 
 pub use deps::{resolve_disable, resolve_enable};
 pub use registry::Registry;
@@ -134,6 +135,12 @@ pub trait AddonInstance {
     ) -> Option<AnyView> {
         None
     }
+    /// True while this add-on wants the core's second editor group to be available
+    /// (Split panes). Off by default, and the only thing that decides whether the
+    /// tab menu offers "Split right": no running add-on says yes, no split.
+    fn enables_split(&self) -> bool {
+        false
+    }
 }
 
 /// Every add-on Smithy ships. One line per add-on.
@@ -145,5 +152,6 @@ pub fn all() -> Vec<Box<dyn Addon>> {
         Box::new(pull_requests::PullRequests),
         Box::new(search::Search),
         Box::new(source_control::SourceControl),
+        Box::new(split_panes::SplitPanes),
     ]
 }

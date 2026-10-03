@@ -93,6 +93,30 @@ impl<C> TabSet<C> {
         self.closed.pop()
     }
 
+    /// Remove tab `i` without remembering it for reopen, so it can be moved to
+    /// another editor group. `active` is clamped the same way `close` does it.
+    pub fn take(&mut self, i: usize) -> Option<Tab<C>> {
+        if i >= self.tabs.len() {
+            return None;
+        }
+        let tab = self.tabs.remove(i);
+        if i < self.active || (i == self.active && self.active == self.tabs.len()) {
+            self.active = self.active.saturating_sub(1);
+        }
+        Some(tab)
+    }
+
+    /// Add `tab` at the end and make it active, skipping a path already present.
+    /// Returns true when it was added.
+    pub fn add(&mut self, tab: Tab<C>) -> bool {
+        if self.position(&tab.path).is_some() {
+            return false;
+        }
+        self.tabs.push(tab);
+        self.active = self.tabs.len() - 1;
+        true
+    }
+
     /// Follow a rename: every tab at `from` or under it moves to `to`.
     pub fn remap_paths(&mut self, from: &Path, to: &Path) {
         let moved = |p: &Path| -> PathBuf {
@@ -268,5 +292,36 @@ mod tests {
         assert!(s.tabs.is_empty());
         // Closing remembers each one for reopen.
         assert_eq!(s.pop_closed(), Some(PathBuf::from("a")));
+    }
+
+    #[test]
+    fn take_removes_without_remembering_and_clamps_active() {
+        let mut s = set(&["a", "b", "c"]);
+        s.active = 1; // b
+        let taken = s.take(1).expect("tab in range");
+        assert_eq!(taken.path, PathBuf::from("b"));
+        assert_eq!(order(&s), ["a", "c"]);
+        // The removed active tab leaves the index on its neighbour ("c").
+        assert_eq!(s.active, 1);
+        assert_eq!(s.active_tab().unwrap().path, PathBuf::from("c"));
+        // A moved tab is not offered for reopen.
+        assert_eq!(s.pop_closed(), None);
+        assert!(s.take(9).is_none());
+    }
+
+    #[test]
+    fn add_appends_activates_and_skips_a_path_already_present() {
+        let mut s = set(&["a", "b"]);
+        let tab = s.take(0).expect("tab in range");
+        assert!(s.add(tab));
+        assert_eq!(order(&s), ["b", "a"]);
+        assert_eq!(s.active, 1);
+        let dup = Tab {
+            path: PathBuf::from("b"),
+            pinned: false,
+            content: (),
+        };
+        assert!(!s.add(dup));
+        assert_eq!(order(&s), ["b", "a"]);
     }
 }

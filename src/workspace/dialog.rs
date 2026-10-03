@@ -13,8 +13,11 @@ impl Workspace {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| path.display().to_string());
-        let dirty = (0..self.tabs.tabs.len())
-            .any(|i| self.tabs.tabs[i].path.starts_with(&path) && self.is_dirty(i, cx));
+        let dirty = [false, true].into_iter().any(|right| {
+            let set = self.group(right);
+            (0..set.tabs.len())
+                .any(|i| set.tabs[i].path.starts_with(&path) && self.is_dirty_in(right, i, cx))
+        });
         let body = if dirty {
             "You can restore it from the Recycle Bin. It has unsaved changes, which go with it."
         } else {
@@ -98,6 +101,10 @@ impl Workspace {
         match ops::delete(&path) {
             Ok(()) => {
                 self.tabs.close_under(&path);
+                if let Some(right) = self.right.as_mut() {
+                    right.close_under(&path);
+                }
+                self.prune_right();
                 if let Some(tree) = self.tree.clone() {
                     tree.update(cx, |tree, cx| tree.reload(cx));
                 }

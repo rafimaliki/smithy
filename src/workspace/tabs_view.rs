@@ -1,16 +1,48 @@
-//! The tab bar, the `Closed <file>` toast and the unsaved-changes prompt. The
-//! bar's right-click menu is in `tab_menu.rs`. Design: board frames
-//! `files-tabs-pinned`, `reopen-toast`, `unsaved-prompt`.
+//! The tab bar: one per editor group, its drag source and drop target. The bar's
+//! right-click menu is in `tab_menu.rs`; the toast and unsaved prompt it raises
+//! are in `tab_prompt.rs`. Design: board frames `files-tabs-pinned`,
+//! `reopen-toast`, `unsaved-prompt`, `split-panes`.
 use super::Workspace;
-use crate::keymap;
-use crate::settings::Settings;
-use crate::theme::{on_accent, Theme};
+use crate::theme::Theme;
 use gpui::{
-    div, hsla, point, prelude::*, px, AnyElement, BoxShadow, Context, Div, MouseButton,
-    MouseDownEvent, SharedString, Stateful,
+    div, prelude::*, px, AnyElement, Context, MouseButton, MouseDownEvent, Render, Rgba,
+    SharedString, Window,
 };
+use std::path::PathBuf;
 
 const PIN: &str = "icons/pin.svg";
+
+/// What a dragged tab carries: its path and the group it came from, so a drop on
+/// the other group can move it across.
+#[derive(Clone)]
+pub(super) struct DraggedTab {
+    pub path: PathBuf,
+    pub from_right: bool,
+}
+
+/// The label that follows the cursor while a tab is dragged.
+struct TabDragPreview {
+    label: SharedString,
+    bg: Rgba,
+    line: Rgba,
+    ink: Rgba,
+}
+
+impl Render for TabDragPreview {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px(px(10.))
+            .h(px(26.))
+            .flex()
+            .items_center()
+            .bg(self.bg)
+            .border_1()
+            .border_color(self.line)
+            .rounded(px(6.))
+            .text_color(self.ink)
+            .child(self.label.clone())
+    }
+}
 
 fn pin_mark(t: &Theme) -> AnyElement {
     gpui::svg()
@@ -22,41 +54,31 @@ fn pin_mark(t: &Theme) -> AnyElement {
         .into_any_element()
 }
 
-/// A dialog/toast button: accent when primary, outlined otherwise.
-fn button(id: &'static str, label: &'static str, primary: bool, t: &Theme) -> Stateful<Div> {
-    div()
-        .id(id)
-        .flex()
-        .items_center()
-        .justify_center()
-        .h(px(28.))
-        .px(px(12.))
-        .rounded(px(6.))
-        .flex_none()
-        .cursor_pointer()
-        .border_1()
-        .border_color(if primary { t.acc } else { t.line })
-        .when(primary, |d| d.bg(t.acc).text_color(on_accent()))
-        .when(!primary, |d| d.hover(|d| d.bg(t.hov)))
-        .child(label)
-}
-
 impl Workspace {
-    pub(super) fn tab_bar(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn tab_bar(
+        &self,
+        right: bool,
+        t: &Theme,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let set = self.group(right);
+        let focused = !right || self.focus_right;
+        let (bg, line, ink) = (t.bg, t.line, t.ink);
         let mut bar = div()
+            .id(SharedString::from(format!("tabbar-{right}")))
             .h(px(36.))
             .flex_none()
             .flex()
             .bg(t.side)
             .border_b_1()
             .border_color(t.line);
-        let pinned_count = self.tabs.tabs.iter().filter(|t| t.pinned).count();
-        for (i, tab) in self.tabs.tabs.iter().enumerate() {
-            let active = i == self.tabs.active && !self.show_settings;
-            let dirty = self.is_dirty(i, cx);
+        let pinned_count = set.tabs.iter().filter(|t| t.pinned).count();
+        for (i, tab) in set.tabs.iter().enumerate() {
+            let active = i == set.active && !self.show_settings;
+            let dirty = self.is_dirty_in(right, i, cx);
             let pinned = tab.pinned;
-            let name = self.tab_label(i);
-            let group: SharedString = format!("tab-{i}").into();
+            let name = Self::tab_label(set, i);
+            let group: SharedString = format!("tabgrp-{right}-{i}").into();
             let slot = div()
                 .relative()
                 .w(px(16.))
@@ -77,7 +99,7 @@ impl Workspace {
                 )
                 .child(
                     div()
-                        .id(("close", i))
+                        .id((SharedString::from(format!("close-{right}")), i))
                         .absolute()
                         .size_full()
                         .flex()
@@ -90,14 +112,14 @@ impl Workspace {
                             MouseButton::Left,
                             cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                                 cx.stop_propagation();
-                                this.request_close(i, window, cx)
+                                this.request_close(right, i, window, cx)
                             }),
                         )
                         .child("×"),
                 );
             // Pinned tabs are compact, carry a pin mark and have no close button.
             let mut item = div()
-                .id(("tab", i))
+                .id((SharedString::from(format!("tab-{right}")), i))
                 .group(group)
                 .flex()
                 .items_center()
@@ -106,33 +128,61 @@ impl Workspace {
                 .px(px(if pinned { 12. } else { 14. }))
                 .cursor_pointer()
                 .text_color(if active { t.ink } else { t.mute })
-                .when(active, |d| d.bg(t.bg).border_t_1().border_color(t.acc))
+                .when(active, |d| {
+                    d.bg(t.bg)
+                        .border_t_1()
+                        .border_color(if focused { t.acc } else { t.line })
+                })
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                         this.show_settings = false;
-                        this.tabs.active = i;
+                        this.focus_group(right);
+                        this.group_mut(right).active = i;
                         this.focus_tab(window, cx);
                     }),
                 )
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                        this.focus_group(right);
                         this.tab_menu = Some(super::tabs::TabMenu {
                             index: i,
+                            right,
                             at: e.position,
                         });
                         cx.notify();
                     }),
                 );
             if pinned {
-                item = item.child(pin_mark(t)).child(name);
+                item = item.child(pin_mark(t)).child(name.clone());
             } else {
-                item = item.child(name).child(slot);
+                item = item.child(name.clone()).child(slot);
+            }
+            // Dragging a tab onto the other group moves it there. Only worth
+            // wiring while there are two groups, so the single-group path pays
+            // nothing.
+            if self.is_split() {
+                let drag_label = name;
+                let drag_path = tab.path.clone();
+                item = item.on_drag(
+                    DraggedTab {
+                        path: drag_path,
+                        from_right: right,
+                    },
+                    move |_, _offset, _window, cx| {
+                        cx.new(|_| TabDragPreview {
+                            label: drag_label.clone(),
+                            bg,
+                            line,
+                            ink,
+                        })
+                    },
+                );
             }
             bar = bar.child(item);
             // A hairline between the pinned block and the rest.
-            if pinned && i + 1 == pinned_count && pinned_count < self.tabs.tabs.len() {
+            if pinned && i + 1 == pinned_count && pinned_count < set.tabs.len() {
                 bar = bar.child(
                     div()
                         .w(px(1.))
@@ -144,114 +194,17 @@ impl Workspace {
                 );
             }
         }
+        // Accept a tab dragged from the other group; only relevant while split.
+        if self.is_split() {
+            let entity = cx.entity();
+            bar = bar.on_drop(move |dragged: &DraggedTab, window, cx| {
+                if dragged.from_right != right {
+                    entity.update(cx, |this, cx| {
+                        this.move_tab_between(&dragged.path, dragged.from_right, window, cx)
+                    });
+                }
+            });
+        }
         bar
-    }
-
-    /// The `Closed <file>` toast with its Reopen button, or `None`.
-    pub(super) fn toast(&self, t: &Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let toast = self.toast.as_ref()?;
-        let text = toast.text.clone();
-        let hint = self.reopen_hint(cx);
-        Some(
-            div()
-                .absolute()
-                .left(px(16.))
-                .bottom(px(14.))
-                .flex()
-                .items_center()
-                .gap(px(14.))
-                .px(px(14.))
-                .py(px(10.))
-                .bg(t.side)
-                .border_1()
-                .border_color(t.line)
-                .rounded(px(8.))
-                .shadow(vec![BoxShadow {
-                    color: hsla(0., 0., 0., 0.5),
-                    offset: point(px(0.), px(8.)),
-                    blur_radius: px(28.),
-                    spread_radius: px(0.),
-                }])
-                .text_color(t.ink)
-                .occlude()
-                .child(text)
-                .child(
-                    button("toast-reopen", "Reopen", false, t)
-                        .on_click(cx.listener(|this, _, window, cx| this.reopen_last(window, cx))),
-                )
-                .when_some(hint, |d, h| {
-                    d.child(div().text_size(px(12.)).text_color(t.mute).child(h))
-                })
-                .into_any_element(),
-        )
-    }
-
-    /// The key that reopens a closed tab right now, if it is bound.
-    fn reopen_hint(&self, cx: &gpui::App) -> Option<SharedString> {
-        keymap::effective("ReopenTab", &cx.global::<Settings>().shortcuts)
-            .first()
-            .map(|k| keymap::display(k).into())
-    }
-
-    /// Modal shown while closing a tab with unsaved edits.
-    pub(super) fn unsaved_prompt(&self, t: &Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let i = self.pending_close?;
-        let name = self.tab_label(i);
-        Some(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(gpui::rgba(0x00000099))
-                .occlude()
-                .child(
-                    div()
-                        .w(px(440.))
-                        .p(px(22.))
-                        .flex()
-                        .flex_col()
-                        .bg(t.side)
-                        .border_1()
-                        .border_color(t.line)
-                        .rounded(px(10.))
-                        .text_color(t.ink)
-                        .child(
-                            div()
-                                .text_size(px(15.))
-                                .child(format!("Do you want to save the changes to {name}?")),
-                        )
-                        .child(
-                            div()
-                                .mt(px(8.))
-                                .text_color(t.mute)
-                                .child("Your changes will be lost if you do not save them."),
-                        )
-                        .child(
-                            div()
-                                .mt(px(20.))
-                                .flex()
-                                .justify_end()
-                                .gap(px(10.))
-                                .child(button("dont-save", "Don't save", false, t).on_click(
-                                    cx.listener(|this, _, window, cx| {
-                                        this.resolve_close(false, window, cx)
-                                    }),
-                                ))
-                                .child(button("cancel", "Cancel", false, t).on_click(
-                                    cx.listener(|this, _, window, cx| {
-                                        this.cancel_close(window, cx)
-                                    }),
-                                ))
-                                .child(button("save", "Save", true, t).on_click(cx.listener(
-                                    |this, _, window, cx| this.resolve_close(true, window, cx),
-                                ))),
-                        ),
-                )
-                .into_any_element(),
-        )
     }
 }

@@ -63,6 +63,7 @@ pub const CATALOG: &[Shortcut] = &[
     s!(SelectAll, "Select all", "Edit", "ctrl-a", EDITOR),
     // View
     s!(ToggleSidebar, "Toggle sidebar", "View", "ctrl-b", None),
+    s!(SplitRight, "Split right", "View", "ctrl-\\", None),
     s!(
         SearchEverywhere,
         "Search everywhere",

@@ -114,10 +114,10 @@ pub fn start(ws: &mut Workspace, window: &mut Window, cx: &mut Context<Workspace
 
 /// Point the watcher at the currently open files.
 pub fn sync(ws: &mut Workspace) {
+    let files: Vec<PathBuf> = ws.open_paths();
     let Some(watch) = ws.watch.as_mut() else {
         return;
     };
-    let files: Vec<PathBuf> = ws.tabs.tabs.iter().map(|t| t.path.clone()).collect();
     watch.set_files(&files);
 }
 
@@ -130,7 +130,12 @@ fn on_event(ws: &mut Workspace, event: FsEvent, cx: &mut Context<Workspace>) {
             }
         }
         FsEvent::Changed(path) => {
-            for tab in &ws.tabs.tabs {
+            for tab in ws
+                .tabs
+                .tabs
+                .iter()
+                .chain(ws.right.iter().flat_map(|r| r.tabs.iter()))
+            {
                 if tab.path == path {
                     if let TabContent::Editor(editor, _) = &tab.content {
                         editor.update(cx, |editor, cx| editor.external_change(cx));
