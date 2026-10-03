@@ -13,7 +13,9 @@ mod settings_languages;
 mod settings_shortcuts;
 mod settings_shortcuts_view;
 mod settings_view;
+mod split;
 mod tab_menu;
+mod tab_prompt;
 pub mod tab_set;
 mod tabs;
 mod tabs_view;
@@ -65,6 +67,15 @@ pub struct Workspace {
     pub(crate) tree: Option<Entity<TreeView>>,
     tree_sub: Option<Subscription>,
     pub(crate) tabs: TabSet<TabContent>,
+    /// The second editor group, present only while the Split panes add-on is on
+    /// and the user has split. `self.tabs` stays the left group, so with no split
+    /// nothing here allocates and the single-group path is unchanged.
+    pub(crate) right: Option<TabSet<TabContent>>,
+    /// Which group the keyboard, the status bar and a file open act on.
+    pub(crate) focus_right: bool,
+    /// The group the running close queue is closing in, fixed when the close
+    /// starts so it cannot follow the focus.
+    pub(crate) close_right: bool,
     pub(crate) sidebar: Sidebar,
     pub(crate) sidebar_visible: bool,
     /// Raw sidebar width while the divider is being dragged.
@@ -125,6 +136,9 @@ impl Workspace {
             tree: None,
             tree_sub: None,
             tabs: TabSet::default(),
+            right: None,
+            focus_right: false,
+            close_right: false,
             sidebar: Sidebar::Files,
             sidebar_visible: true,
             drag: None,
@@ -186,6 +200,9 @@ impl Workspace {
         }
         self.error = None;
         self.tabs = TabSet::default();
+        self.right = None;
+        self.focus_right = false;
+        self.close_right = false;
         self.pending_close = None;
         self.pending_closes.clear();
         self.tab_menu = None;
@@ -288,6 +305,11 @@ impl Workspace {
                 self.sidebar = Sidebar::Files;
             }
         }
+        // Turning the Split panes add-on off takes the second group away; its tabs
+        // move to the left group so no editor is lost.
+        if self.right.is_some() && !self.split_enabled() {
+            self.collapse_split();
+        }
         self.sync_github_settings(cx);
     }
 
@@ -298,12 +320,11 @@ impl Workspace {
             return;
         }
         self.show_settings = false;
-        match self.tabs.position(path) {
-            Some(i) => self.tabs.active = i,
-            None => {
-                let content = self.make_content(path, window, cx);
-                self.tabs.open(path, || content);
-            }
+        // A file lives in one group: reveal it where it already is rather than
+        // opening a second, divergent editor for the same path.
+        if !self.reveal_open_tab(path) {
+            let content = self.make_content(path, window, cx);
+            self.focused_mut().open(path, || content);
         }
         self.focus_tab(window, cx);
         watch::sync(self);
@@ -320,7 +341,8 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         self.open_file(path, window, cx);
-        if let Some(TabContent::Editor(editor, _)) = self.tabs.active_tab().map(|t| &t.content) {
+        if let Some(TabContent::Editor(editor, _)) = self.focused().active_tab().map(|t| &t.content)
+        {
             editor.update(cx, |editor, cx| editor.goto_line(line, cx));
         }
         self.focus_tab(window, cx);
@@ -368,14 +390,14 @@ impl Workspace {
     }
 
     pub(crate) fn focus_tab(&self, window: &mut Window, cx: &mut Context<Self>) {
-        match self.tabs.active_tab().map(|t| &t.content) {
+        match self.focused().active_tab().map(|t| &t.content) {
             Some(TabContent::Editor(e, _)) => e.read(cx).focus(window),
             _ => window.focus(&self.focus),
         }
     }
 
-    pub(crate) fn is_dirty(&self, i: usize, cx: &gpui::App) -> bool {
-        match self.tabs.tabs.get(i).map(|t| &t.content) {
+    pub(crate) fn is_dirty_in(&self, right: bool, i: usize, cx: &gpui::App) -> bool {
+        match self.group(right).tabs.get(i).map(|t| &t.content) {
             Some(TabContent::Editor(e, _)) => e.read(cx).state.is_dirty(),
             _ => false,
         }
@@ -403,16 +425,16 @@ impl Workspace {
         self.show_settings = false;
         let path = PathBuf::from(format!("<addon>/{key}"));
         let title: SharedString = title.into();
-        match self.tabs.position(&path) {
-            Some(i) => {
-                self.tabs.active = i;
-                if let Some(tab) = self.tabs.tabs.get_mut(i) {
-                    tab.content = TabContent::Addon { view, title };
-                }
+        if let Some((right, i)) = self.find_tab(&path) {
+            self.focus_group(right);
+            let set = self.group_mut(right);
+            set.active = i;
+            if let Some(tab) = set.tabs.get_mut(i) {
+                tab.content = TabContent::Addon { view, title };
             }
-            None => {
-                self.tabs.open(&path, || TabContent::Addon { view, title });
-            }
+        } else {
+            self.focused_mut()
+                .open(&path, || TabContent::Addon { view, title });
         }
         cx.notify();
     }
@@ -420,7 +442,12 @@ impl Workspace {
     /// A path moved on disk (renamed or cut and pasted): open tabs and their
     /// editors follow it, so saving writes to the new place.
     fn remap_paths(&mut self, from: &Path, to: &Path, cx: &mut Context<Self>) {
-        for tab in &self.tabs.tabs {
+        for tab in self
+            .tabs
+            .tabs
+            .iter()
+            .chain(self.right.iter().flat_map(|r| r.tabs.iter()))
+        {
             if let Ok(rest) = tab.path.strip_prefix(from) {
                 let new = to.join(rest);
                 if let TabContent::Editor(e, _) = &tab.content {
@@ -429,6 +456,9 @@ impl Workspace {
             }
         }
         self.tabs.remap_paths(from, to);
+        if let Some(right) = self.right.as_mut() {
+            right.remap_paths(from, to);
+        }
         watch::sync(self);
         cx.notify();
     }

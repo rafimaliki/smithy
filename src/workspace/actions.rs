@@ -1,8 +1,8 @@
 //! Action handlers: one method per workspace action, wired in `render.rs`.
 use super::Workspace;
 use crate::actions::{
-    CloseTab, NextTab, OpenFolder, PrevTab, Quit, ReopenTab, Save, SearchEverywhere, ToggleSidebar,
-    ToggleTerminal,
+    CloseTab, NextTab, OpenFolder, PrevTab, Quit, ReopenTab, Save, SearchEverywhere, SplitRight,
+    ToggleSidebar, ToggleTerminal,
 };
 use crate::editor::view::EditorEvent;
 use gpui::{Context, Window};
@@ -53,19 +53,25 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.tabs.tabs.is_empty() {
-            self.request_close(self.tabs.active, window, cx);
+        let right = self.focus_right;
+        let i = self.focused().active;
+        if !self.focused().tabs.is_empty() {
+            self.request_close(right, i, window, cx);
         }
     }
 
     pub(crate) fn on_next_tab(&mut self, _: &NextTab, window: &mut Window, cx: &mut Context<Self>) {
-        self.tabs.next();
+        let right = self.focus_right;
+        self.focused_mut().next();
+        self.focus_group(right);
         self.focus_tab(window, cx);
         cx.notify();
     }
 
     pub(crate) fn on_prev_tab(&mut self, _: &PrevTab, window: &mut Window, cx: &mut Context<Self>) {
-        self.tabs.prev();
+        let right = self.focus_right;
+        self.focused_mut().prev();
+        self.focus_group(right);
         self.focus_tab(window, cx);
         cx.notify();
     }
@@ -76,7 +82,18 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.reopen_last(window, cx);
+        let right = self.focus_right;
+        self.reopen_last(right, window, cx);
+    }
+
+    /// Ctrl+\: split the focused group to the right (Split panes add-on only).
+    pub(crate) fn on_split_right(
+        &mut self,
+        _: &SplitRight,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.split_active_right(window, cx);
     }
 
     /// Ctrl+Shift+O: hand the key to the add-on that owns Search everywhere.
@@ -106,7 +123,9 @@ impl Workspace {
     }
 
     pub(crate) fn on_save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
-        self.save_tab(self.tabs.active, cx);
+        let right = self.focus_right;
+        let i = self.focused().active;
+        self.save_tab(right, i, cx);
         cx.notify();
     }
 

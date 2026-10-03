@@ -29,14 +29,14 @@ impl Workspace {
     }
 
     fn active_lang(&self, cx: &Context<Self>) -> Option<Lang> {
-        match self.tabs.active_tab().map(|t| &t.content) {
+        match self.focused().active_tab().map(|t| &t.content) {
             Some(TabContent::Editor(e, _)) => e.read(cx).lang(),
             _ => None,
         }
     }
 
     fn choose_lang(&mut self, lang: Option<Lang>, cx: &mut Context<Self>) {
-        if let Some(TabContent::Editor(e, _)) = self.tabs.active_tab().map(|t| &t.content) {
+        if let Some(TabContent::Editor(e, _)) = self.focused().active_tab().map(|t| &t.content) {
             e.update(cx, |editor, cx| editor.set_lang(lang, cx));
         }
         self.lang_menu = false;

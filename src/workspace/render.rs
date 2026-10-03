@@ -87,12 +87,12 @@ impl Workspace {
             .map(IntoElement::into_any_element)
     }
 
-    fn content(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+    fn content(&self, right: bool, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         if self.show_settings {
             return self.settings_view(t, cx).into_any_element();
         }
         match self
-            .tabs
+            .group(right)
             .active_tab()
             .map(|tab| (&tab.content, tab.path.as_path()))
         {
@@ -124,6 +124,77 @@ impl Workspace {
             None => centered(t, "Open a file from the explorer.".into()).into_any_element(),
         }
     }
+
+    /// One editor group: its tab bar over its content. The right column carries the
+    /// divider from the design; clicking a column makes it the focused group.
+    fn group_column(&self, right: bool, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let entity = cx.entity();
+        div()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .when(right, |d| d.border_l_1().border_color(t.line))
+            .child(self.tab_bar(right, t, cx))
+            .child(
+                div()
+                    .id(gpui::SharedString::from(format!("group-{right}")))
+                    .flex_1()
+                    .min_h_0()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                            if this.focus_right != right {
+                                this.focus_group(right);
+                                this.focus_tab(window, cx);
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .on_drop(move |dragged: &super::tabs_view::DraggedTab, window, cx| {
+                        if dragged.from_right != right {
+                            entity.update(cx, |this, cx| {
+                                this.move_tab_between(&dragged.path, dragged.from_right, window, cx)
+                            });
+                        }
+                    })
+                    .child(self.content(right, t, cx)),
+            )
+            .into_any_element()
+    }
+
+    /// The editor area: one column, or two side by side while split, with the
+    /// add-on bottom panel under all of it.
+    fn editor_area(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let columns = if self.show_settings || !self.is_split() {
+            div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .child(self.tab_bar(false, t, cx))
+                .child(div().flex_1().min_h_0().child(self.content(false, t, cx)))
+                .into_any_element()
+        } else {
+            div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .child(self.group_column(false, t, cx))
+                .child(self.group_column(true, t, cx))
+                .into_any_element()
+        };
+        div()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .relative()
+            .child(columns)
+            .when_some(self.bottom_panel(cx), |d, panel| d.child(panel))
+            .children(self.toast(t, cx))
+            .into_any_element()
+    }
 }
 
 fn centered(t: &Theme, msg: gpui::SharedString) -> impl IntoElement {
@@ -148,6 +219,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_next_tab))
             .on_action(cx.listener(Self::on_prev_tab))
             .on_action(cx.listener(Self::on_reopen_tab))
+            .on_action(cx.listener(Self::on_split_right))
             .on_action(cx.listener(Self::on_search_everywhere))
             .on_action(cx.listener(Self::on_toggle_terminal))
             .on_action(cx.listener(Self::on_save))
@@ -210,10 +282,7 @@ impl Render for Workspace {
                                 .flex()
                                 .flex_col()
                                 .relative()
-                                .child(self.tab_bar(&t, cx))
-                                .child(div().flex_1().min_h_0().child(self.content(&t, cx)))
-                                .when_some(self.bottom_panel(cx), |d, panel| d.child(panel))
-                                .children(self.toast(&t, cx)),
+                                .child(self.editor_area(&t, cx)),
                         ),
                 )
                 .child(self.status_bar(&t, cx)),

@@ -99,7 +99,7 @@ impl Workspace {
 
     pub(super) fn status_bar(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let mut right = div().ml_auto().flex().gap(px(18.));
-        if let Some(tab) = self.tabs.active_tab() {
+        if let Some(tab) = self.focused().active_tab() {
             if let TabContent::Editor(e, _) = &tab.content {
                 let wraps = e.read(cx).wraps();
                 let editor = e.clone();
