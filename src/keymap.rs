@@ -65,6 +65,13 @@ pub const CATALOG: &[Shortcut] = &[
     // View
     s!(ToggleSidebar, "Toggle sidebar", "View", "ctrl-b", None),
     s!(
+        SearchEverywhere,
+        "Search everywhere",
+        "View",
+        "ctrl-shift-o",
+        None
+    ),
+    s!(
         TogglePreview,
         "Toggle Markdown preview",
         "View",
@@ -101,6 +108,7 @@ pub const CATALOG: &[Shortcut] = &[
     s!(Enter, "New line", "Editor", "enter", EDITOR),
     s!(Tab, "Indent", "Editor", "tab", EDITOR),
     s!(ToggleBlame, "Toggle blame", "Editor", "ctrl-alt-b", EDITOR),
+    s!(ToggleWrap, "Toggle word wrap", "Editor", "alt-z", EDITOR),
 ];
 
 fn shortcut(action: &str) -> Option<&'static Shortcut> {

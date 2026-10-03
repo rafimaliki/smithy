@@ -1,4 +1,4 @@
-use super::{Sidebar, TabContent, Workspace};
+use super::{banner, Sidebar, TabContent, Workspace};
 use crate::settings::{SIDEBAR_DEFAULT, SIDEBAR_MIN};
 use crate::theme::Theme;
 use gpui::{
@@ -95,10 +95,23 @@ impl Workspace {
                         return view.into_any_element();
                     }
                 }
-                e.clone().into_any_element()
+                let editor = e.clone();
+                match banner::editor_bar(e, t, cx) {
+                    Some(bar) => div()
+                        .flex()
+                        .flex_col()
+                        .size_full()
+                        .child(bar)
+                        .child(editor)
+                        .into_any_element(),
+                    None => editor.into_any_element(),
+                }
             }
             Some((TabContent::Viewer(v), _)) => v.clone().into_any_element(),
             Some((TabContent::Addon { view, .. }, _)) => view.clone().into_any_element(),
+            Some((TabContent::Binary { path, size }, _)) => {
+                banner::binary_screen(t, path, *size, cx)
+            }
             Some((TabContent::Notice(msg), _)) => centered(t, msg.clone()).into_any_element(),
             None => centered(t, "Open a file from the explorer.".into()).into_any_element(),
         }
@@ -127,6 +140,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_next_tab))
             .on_action(cx.listener(Self::on_prev_tab))
             .on_action(cx.listener(Self::on_reopen_tab))
+            .on_action(cx.listener(Self::on_search_everywhere))
             .on_action(cx.listener(Self::on_save))
             .on_action(cx.listener(Self::on_quit))
             .relative()
@@ -186,13 +200,17 @@ impl Render for Workspace {
                                 .min_w_0()
                                 .flex()
                                 .flex_col()
+                                .relative()
                                 .child(self.tab_bar(&t, cx))
-                                .child(div().flex_1().min_h_0().child(self.content(&t, cx))),
+                                .child(div().flex_1().min_h_0().child(self.content(&t, cx)))
+                                .children(self.toast(&t, cx)),
                         ),
                 )
                 .child(self.status_bar(&t, cx)),
         )
         .children(self.lang_menu(&t, cx))
+        .children(self.tab_menu(&t, cx))
+        .children(self.addon_overlay(cx))
         .children(self.unsaved_prompt(&t, cx))
         .children(self.delete_dialog(&t, cx))
     }
