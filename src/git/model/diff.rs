@@ -45,7 +45,8 @@ pub fn apply_hunk(lines: &[String], hunk: &Hunk, forward: bool) -> Vec<String> {
     } else {
         (hunk.new_start, hunk.new_lines, |o| o != Origin::Add)
     };
-    let start = if start == 0 { 0 } else { (start - 1) as usize };
+    // Clamp so a hunk that no longer fits the text edits the end, never panics.
+    let start = (start.saturating_sub(1) as usize).min(lines.len());
     let end = (start + count as usize).min(lines.len());
     let replacement: Vec<String> = hunk
         .lines

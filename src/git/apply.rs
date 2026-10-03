@@ -33,8 +33,13 @@ impl Repo {
     /// Unstage a file: put the index entry back to what HEAD has (or drop it).
     pub fn unstage_file(&self, rel: &str) -> Result<(), git2::Error> {
         let mut index = self.inner().index()?;
-        match self.head_content(rel)? {
-            Some(content) => self.write_index(&mut index, rel, &content)?,
+        match self.head_entry(rel)? {
+            // The blob id, not its text: a file that is binary or not UTF-8 must come
+            // back byte for byte.
+            Some((id, mode)) => {
+                let file_size = self.inner().find_blob(id)?.size() as u32;
+                index.add(&index_entry(rel, id, mode, file_size))?
+            }
             None => index.remove_path(Path::new(rel))?,
         }
         index.write()
@@ -58,7 +63,7 @@ impl Repo {
         let Some(h) = file.hunks.get(hunk) else {
             return Ok(());
         };
-        let base = self.index_content(rel)?.unwrap_or_default();
+        let base = self.index_text(rel)?.unwrap_or_default();
         let content = join_lines(&apply_hunk(&lines_of(&base), h, true));
         let mut index = self.inner().index()?;
         self.write_index(&mut index, rel, &content)?;
@@ -70,10 +75,10 @@ impl Repo {
         let Some(h) = file.hunks.get(hunk) else {
             return Ok(());
         };
-        let base = self.index_content(rel)?.unwrap_or_default();
+        let base = self.index_text(rel)?.unwrap_or_default();
         let content = join_lines(&apply_hunk(&lines_of(&base), h, false));
         let mut index = self.inner().index()?;
-        if content.is_empty() && self.head_content(rel)?.is_none() {
+        if content.is_empty() && self.head_entry(rel)?.is_none() {
             index.remove_path(Path::new(rel))?;
         } else {
             self.write_index(&mut index, rel, &content)?;
@@ -87,7 +92,7 @@ impl Repo {
         let Some(h) = file.hunks.get(hunk) else {
             return Ok(());
         };
-        let base = self.workdir_content(rel)?.unwrap_or_default();
+        let base = self.workdir_text(rel)?.unwrap_or_default();
         let content = join_lines(&apply_hunk(&lines_of(&base), h, false));
         std::fs::write(self.abs(rel), content).map_err(|e| git2::Error::from_str(&e.to_string()))
     }
@@ -97,6 +102,36 @@ impl Repo {
             Ok(text) => Ok(Some(text)),
             Err(_) => Ok(None),
         }
+    }
+
+    /// The working file as UTF-8, `None` when it is gone. A file that is not UTF-8 is
+    /// an error: hunk edits rebuild the file from text and would rewrite its bytes.
+    // ponytail: hunk edits need UTF-8; upgrade: apply hunks to bytes.
+    fn workdir_text(&self, rel: &str) -> Result<Option<String>, git2::Error> {
+        match std::fs::read(self.abs(rel)) {
+            Ok(bytes) => utf8(bytes).map(Some),
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// The staged blob as UTF-8; same rule as `workdir_text`.
+    fn index_text(&self, rel: &str) -> Result<Option<String>, git2::Error> {
+        let index = self.inner().index()?;
+        match index.get_path(Path::new(rel), 0) {
+            Some(e) => utf8(self.inner().find_blob(e.id)?.content().to_vec()).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// The blob id and file mode HEAD has for `rel`.
+    fn head_entry(&self, rel: &str) -> Result<Option<(Oid, u32)>, git2::Error> {
+        let Some(tree) = super::repo::head_tree(self.inner())? else {
+            return Ok(None);
+        };
+        Ok(tree
+            .get_path(Path::new(rel))
+            .ok()
+            .map(|e| (e.id(), e.filemode() as u32)))
     }
 
     pub fn index_content(&self, rel: &str) -> Result<Option<String>, git2::Error> {
@@ -127,22 +162,32 @@ impl Repo {
     ) -> Result<(), git2::Error> {
         let path = Path::new(rel);
         let mode = index.get_path(path, 0).map(|e| e.mode).unwrap_or(0o100644);
-        let entry = IndexEntry {
-            ctime: IndexTime::new(0, 0),
-            mtime: IndexTime::new(0, 0),
-            dev: 0,
-            ino: 0,
-            mode,
-            uid: 0,
-            gid: 0,
-            file_size: 0,
-            id: Oid::ZERO_SHA1,
-            flags: 0,
-            flags_extended: 0,
-            path: rel.as_bytes().to_vec(),
-        };
+        let entry = index_entry(rel, Oid::ZERO_SHA1, mode, 0);
         index.add_frombuffer(&entry, content.as_bytes())
     }
+}
+
+fn index_entry(rel: &str, id: Oid, mode: u32, file_size: u32) -> IndexEntry {
+    IndexEntry {
+        ctime: IndexTime::new(0, 0),
+        mtime: IndexTime::new(0, 0),
+        dev: 0,
+        ino: 0,
+        mode,
+        uid: 0,
+        gid: 0,
+        file_size,
+        id,
+        flags: 0,
+        flags_extended: 0,
+        path: rel.as_bytes().to_vec(),
+    }
+}
+
+fn utf8(bytes: Vec<u8>) -> Result<String, git2::Error> {
+    String::from_utf8(bytes).map_err(|_| {
+        git2::Error::from_str("this file is not UTF-8: stage, unstage or discard the whole file")
+    })
 }
 
 fn lines_of(text: &str) -> Vec<String> {
@@ -159,6 +204,10 @@ mod tests {
     use crate::git::Repo;
 
     fn repo_with(name: &str, original: &str, changed: &str) -> (PathBuf, Repo) {
+        repo_with_bytes(name, original.as_bytes(), changed.as_bytes())
+    }
+
+    fn repo_with_bytes(name: &str, original: &[u8], changed: &[u8]) -> (PathBuf, Repo) {
         let dir = std::env::temp_dir().join(format!("smithy-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -239,6 +288,39 @@ mod tests {
             .hunks
             .is_empty());
         assert_eq!(repo.index_content("f.txt").unwrap().unwrap(), original);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    // Latin-1 text with a lone 0xE9 byte: fine for most tools, not valid UTF-8.
+    const LATIN1: &[u8] = b"line 1\ncaf\xe9\nline 3\n";
+
+    #[test]
+    fn unstage_file_restores_a_non_utf8_file_byte_for_byte() {
+        let changed = [LATIN1, b"more\n".as_slice()].concat();
+        let (dir, repo) = repo_with_bytes("unstage-latin1", LATIN1, &changed);
+        repo.stage_file("f.txt").unwrap();
+        repo.unstage_file("f.txt").unwrap();
+        let blob = repo
+            .inner()
+            .index()
+            .unwrap()
+            .get_path(Path::new("f.txt"), 0)
+            .unwrap()
+            .id;
+        assert_eq!(repo.inner().find_blob(blob).unwrap().content(), LATIN1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn hunk_edits_refuse_a_non_utf8_file_and_leave_it_alone() {
+        let changed = LATIN1
+            .iter()
+            .map(|&b| if b == b'3' { b'4' } else { b })
+            .collect::<Vec<u8>>();
+        let (dir, repo) = repo_with_bytes("hunk-latin1", LATIN1, &changed);
+        assert!(repo.discard_hunk("f.txt", 0).is_err());
+        assert!(repo.stage_hunk("f.txt", 0).is_err());
+        assert_eq!(std::fs::read(dir.join("f.txt")).unwrap(), changed);
         let _ = std::fs::remove_dir_all(dir);
     }
 }
