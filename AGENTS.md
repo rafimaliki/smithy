@@ -2,7 +2,7 @@
 
 A lightweight, native Windows code editor: file-tree sidebar, editor, and a git/GitHub review view (working changes, branch-vs-branch diffs, pull requests viewed locally) for people who work with coding agents.
 
-Status: **design phase**. No app code yet. Tech stack and features are settled through `/grill-me` and the framery board first; do not scaffold Rust code until the stack decision is written in `docs/`.
+Status: **design done, no app code yet**. Stack and features are in `docs/`, screens are on the framery board. The first code is the gpui spike described in `docs/stack.md`.
 
 ```
 npx framery          # design board (screens and flows)
@@ -14,7 +14,7 @@ cargo clippy -- -D warnings
 
 - **Small and low-RAM** — the product's reason to exist is being lighter than VS Code. No Electron, no bundled browser engine unless the stack decision records a measured exception.
 - **Windows first** — it must run on Windows 11 without extra runtimes. Other platforms are not a goal yet; do not pay for portability that is not asked for.
-- **Only necessary features** — each feature must serve browsing files, editing them, or reviewing git/GitHub changes. Anything else (extensions, debugger, terminal, etc.) needs an explicit decision in `docs/`.
+- **Small core, everything else an add-on** — the core is file tree, tabs and editing. Every other feature is a first-party add-on, off by default and not loaded when off. A new feature either fits the core list in `docs/features.md` or becomes an add-on; it never makes the core heavier.
 - **GitHub only for now** — one provider. The user supplies their own token. Do not abstract over other providers until a second one is real.
 - **Tokens never touch disk in plain text or git** — store in the OS credential store; `.env` and `*.token` are gitignored.
 
@@ -22,7 +22,7 @@ cargo clippy -- -D warnings
 
 ```
 framery/smithy/   design board: screens and flows, edited through framery tools, not by hand
-docs/             decisions (created by /grill-me; add files only when they have content)
+docs/             stack.md and features.md; add files only when they have content
 src/              Rust code, by domain (tree, editor, git, github), once the stack is decided
 ```
 
@@ -58,12 +58,14 @@ src/              Rust code, by domain (tree, editor, git, github), once the sta
 
 | File | Read when |
 |---|---|
-| `docs/` (empty until `/grill-me` finishes) | choosing a crate, a UI toolkit, or deciding whether a feature belongs |
+| `docs/stack.md` | choosing a crate or UI toolkit, or deciding where a feature's code lives (core or add-on) |
+| `docs/features.md` | deciding whether a feature belongs, and whether it is core or an add-on |
+| `framery/smithy` (the board) | building any screen: read its frames and group descriptions first |
 
 ## Definition of done
 
 - The change landed on a branch and merged by pull request; `main` was never written to directly.
 - Design changes: the flow is settled on its framery canvas and `npx framery doctor` says ok.
 - Code changes: `cargo fmt --check`, `cargo clippy -- -D warnings` and `cargo test` pass.
-- Idle RAM and cold-start time of the built app are checked against the targets in `docs/` once they exist.
+- Idle RAM and cold-start time of the built app (core only, one folder open) are checked against the targets in `docs/stack.md` once code exists.
 - No file over the ceiling without a note here saying why.
