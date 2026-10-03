@@ -41,6 +41,16 @@ impl Repo {
         &self.root
     }
 
+    /// The URL of a named remote, if it exists.
+    pub fn remote_url(&self, name: &str) -> Option<String> {
+        self.inner
+            .find_remote(name)
+            .ok()?
+            .url()
+            .ok()
+            .map(str::to_string)
+    }
+
     /// Current branch shorthand, or "HEAD" when detached.
     pub fn branch(&self) -> String {
         match self.inner.head() {
@@ -217,7 +227,7 @@ fn unstaged_char(s: Status) -> Option<char> {
     }
 }
 
-fn diff_options(rel: Option<&str>) -> DiffOptions {
+pub(crate) fn diff_options(rel: Option<&str>) -> DiffOptions {
     let mut opts = DiffOptions::new();
     opts.context_lines(3).interhunk_lines(0);
     opts.include_untracked(true)
@@ -229,7 +239,7 @@ fn diff_options(rel: Option<&str>) -> DiffOptions {
     opts
 }
 
-fn to_file_diff(diff: &Diff<'_>, i: usize, delta: git2::DiffDelta<'_>) -> FileDiff {
+pub(crate) fn to_file_diff(diff: &Diff<'_>, i: usize, delta: git2::DiffDelta<'_>) -> FileDiff {
     let rel = delta
         .new_file()
         .path()

@@ -4,6 +4,7 @@ mod chrome;
 mod lang_menu;
 mod launch;
 mod render;
+mod settings_github;
 mod settings_languages;
 mod settings_shortcuts;
 mod settings_shortcuts_view;
@@ -22,6 +23,7 @@ use gpui::{
     AnyView, Context, Entity, FocusHandle, Focusable, PathPromptOptions, SharedString,
     Subscription, Window,
 };
+use settings_github::GithubSettings;
 use settings_shortcuts::Capture;
 use settings_view::SettingsSection;
 use std::path::{Path, PathBuf};
@@ -60,6 +62,8 @@ pub struct Workspace {
     pub(crate) lang_menu: bool,
     /// Which settings section the pane shows.
     pub(crate) settings_section: SettingsSection,
+    /// Settings > GitHub, built only while the Pull requests add-on is on.
+    pub(crate) github_settings: Option<Entity<GithubSettings>>,
     /// What the settings page is taking keys for, if anything.
     pub(crate) capture: Option<Capture>,
     /// Text in the shortcuts search field.
@@ -103,6 +107,7 @@ impl Workspace {
             show_settings: false,
             lang_menu: false,
             settings_section: SettingsSection::Appearance,
+            github_settings: None,
             capture: None,
             shortcut_filter: String::new(),
             pending_close: None,
@@ -184,6 +189,29 @@ impl Workspace {
                 self.sidebar = Sidebar::Files;
             }
         }
+        self.sync_github_settings(cx);
+    }
+
+    /// Keep Settings > GitHub alive only while the Pull requests add-on is on.
+    fn sync_github_settings(&mut self, cx: &mut Context<Self>) {
+        if self.registry.instance("pull-requests").is_some() {
+            if self.github_settings.is_none() {
+                self.github_settings = Some(cx.new(GithubSettings::new));
+            }
+        } else {
+            self.github_settings = None;
+            if self.settings_section == SettingsSection::Github {
+                self.settings_section = SettingsSection::Appearance;
+            }
+        }
+    }
+
+    /// The Pull requests add-on's no-token state opens the settings page here.
+    pub(crate) fn open_github_settings(&mut self, cx: &mut Context<Self>) {
+        self.show_settings = true;
+        self.settings_section = SettingsSection::Github;
+        self.capture = None;
+        cx.notify();
     }
 
     pub fn set_addon(&mut self, id: &str, on: bool, cx: &mut Context<Self>) {
@@ -210,6 +238,7 @@ impl Workspace {
                 self.sidebar = Sidebar::Files;
             }
         }
+        self.sync_github_settings(cx);
     }
 
     // ---- tabs ---------------------------------------------------------------
