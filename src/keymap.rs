@@ -54,6 +54,7 @@ fn defaults() -> Vec<Binding> {
         b!(NextTab, "ctrl-tab", None),
         b!(PrevTab, "ctrl-shift-tab", None),
         b!(ReopenTab, "ctrl-shift-t", None),
+        b!(TogglePreview, "ctrl-shift-v", None),
         b!(Quit, "alt-f4", None),
     ]
 }
