@@ -26,6 +26,9 @@ impl EditorView {
         self.refresh_highlight();
         let theme = Theme::by_name(&cx.global::<Settings>().theme);
         let focused = self.focus.is_focused(window);
+        let caret_on = self
+            .blink
+            .visible(self.state.cursor, focused, std::time::Instant::now());
         let (cursor_line, cursor_col) = self.state.line_col(self.state.cursor);
         let (sel_a, sel_b) = self.state.selection();
         let char_w = self.char_w;
@@ -152,6 +155,7 @@ impl EditorView {
                     }
                 }
                 if focused
+                    && caret_on
                     && line == cursor_line
                     && cursor_col >= r.start
                     && (cursor_col < r.end || last)
