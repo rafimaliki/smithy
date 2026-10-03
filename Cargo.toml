@@ -12,6 +12,7 @@ git2 = { version = "0.21.0", default-features = false }
 gpui = "0.2.2"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
 ignore = "0.4"
+notify = "8"
 pulldown-cmark = { version = "0.13", default-features = false }
 regex = "1"
 ropey = "1"
