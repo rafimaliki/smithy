@@ -2,7 +2,7 @@
 //! the reopen toast and the unsaved-changes prompt live in `tabs_view.rs`.
 use super::{Sidebar, TabContent, Workspace};
 use crate::theme::{on_accent, Theme};
-use gpui::{div, prelude::*, px, Context, SharedString, Stateful};
+use gpui::{div, prelude::*, px, AnyElement, Context, SharedString, Stateful};
 
 fn rail_button(id: &'static str, glyph: &'static str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
     div()
@@ -35,6 +35,14 @@ fn badge(text: SharedString, t: &Theme) -> impl IntoElement {
 }
 
 impl Workspace {
+    /// The first add-on overlay that is open, drawn over the whole window.
+    pub(super) fn addon_overlay(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.registry
+            .running()
+            .find_map(|(_, inst)| inst.overlay(cx))
+            .map(IntoElement::into_any_element)
+    }
+
     pub(super) fn rail(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let shown = self.sidebar_visible && !self.show_settings;
         let mut rail = div()

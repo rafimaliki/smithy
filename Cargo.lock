@@ -2714,6 +2714,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ignore"
+version = "0.4.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00b69833ed729dc5aa7d19541d96d6cf8e9137194207a04916d658e43168402f"
+dependencies = [
+ "crossbeam-deque",
+ "globset",
+ "log",
+ "memchr",
+ "regex-automata",
+ "same-file",
+ "walkdir",
+ "winapi-util",
+]
+
+[[package]]
 name = "image"
 version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5011,9 +5027,13 @@ checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 name = "smithy"
 version = "0.1.0"
 dependencies = [
+ "async-channel 2.5.0",
  "git2",
  "gpui",
+ "ignore",
+ "image",
  "pulldown-cmark",
+ "regex",
  "ropey",
  "serde",
  "serde_json",
@@ -5040,6 +5060,7 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-xml",
  "tree-sitter-yaml",
+ "windows 0.57.0",
 ]
 
 [[package]]

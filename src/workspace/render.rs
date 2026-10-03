@@ -127,6 +127,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_next_tab))
             .on_action(cx.listener(Self::on_prev_tab))
             .on_action(cx.listener(Self::on_reopen_tab))
+            .on_action(cx.listener(Self::on_search_everywhere))
             .on_action(cx.listener(Self::on_save))
             .on_action(cx.listener(Self::on_quit))
             .relative()
@@ -196,6 +197,7 @@ impl Render for Workspace {
         )
         .children(self.lang_menu(&t, cx))
         .children(self.tab_menu(&t, cx))
+        .children(self.addon_overlay(cx))
         .children(self.unsaved_prompt(&t, cx))
         .children(self.delete_dialog(&t, cx))
     }
