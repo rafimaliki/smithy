@@ -130,6 +130,15 @@ impl EditorView {
         }
     }
 
+    /// Put the caret at the start of `line` (0-based) and centre it,
+    /// e.g. when a Search result is opened.
+    pub fn goto_line(&mut self, line: usize, cx: &mut Context<Self>) {
+        self.state.set_cursor_line_col(line, 0, false);
+        let visible = self.state.line_col(self.state.cursor).0;
+        self.scroll.scroll_to_item(visible, ScrollStrategy::Center);
+        cx.notify();
+    }
+
     /// Write the buffer to its path and clear the dirty mark.
     pub fn save(&mut self, cx: &mut Context<Self>) -> std::io::Result<()> {
         if let Some(path) = self.state.path.clone() {

@@ -1,5 +1,6 @@
 //! The window's root view: open folder, tabs, sidebar, add-on registry.
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
+mod actions;
 mod banner;
 mod chrome;
 mod dialog;
@@ -14,7 +15,6 @@ mod settings_view;
 pub mod tab_set;
 pub(crate) mod watch;
 
-use crate::actions::*;
 use crate::addon::{AddonContext, Registry};
 use crate::editor::load::{self, Loaded};
 use crate::editor::state::EditorState;
@@ -257,6 +257,22 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Open `path` and put the caret on `line` (0-based), scrolling it into view.
+    /// Used by the Search add-on to jump to a result.
+    pub fn open_file_at(
+        &mut self,
+        path: &Path,
+        line: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_file(path, window, cx);
+        if let Some(TabContent::Editor(editor, _)) = self.tabs.active_tab().map(|t| &t.content) {
+            editor.update(cx, |editor, cx| editor.goto_line(line, cx));
+        }
+        self.focus_tab(window, cx);
+    }
+
     fn make_content(
         &mut self,
         path: &Path,
@@ -426,69 +442,5 @@ impl Workspace {
             self.sidebar_visible = true;
         }
         cx.notify();
-    }
-
-    // ---- action handlers ----------------------------------------------------
-
-    pub(crate) fn on_toggle_sidebar(
-        &mut self,
-        _: &ToggleSidebar,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.sidebar_visible = !self.sidebar_visible;
-        cx.notify();
-    }
-
-    pub(crate) fn on_open_folder(
-        &mut self,
-        _: &OpenFolder,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.prompt_open_folder(window, cx);
-    }
-
-    pub(crate) fn on_close_tab(
-        &mut self,
-        _: &CloseTab,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if !self.tabs.tabs.is_empty() {
-            self.request_close(self.tabs.active, window, cx);
-        }
-    }
-
-    pub(crate) fn on_next_tab(&mut self, _: &NextTab, window: &mut Window, cx: &mut Context<Self>) {
-        self.tabs.next();
-        self.focus_tab(window, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn on_prev_tab(&mut self, _: &PrevTab, window: &mut Window, cx: &mut Context<Self>) {
-        self.tabs.prev();
-        self.focus_tab(window, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn on_reopen_tab(
-        &mut self,
-        _: &ReopenTab,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(p) = self.tabs.pop_closed() {
-            self.open_file(&p, window, cx);
-        }
-    }
-
-    pub(crate) fn on_save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
-        self.save_tab(self.tabs.active, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn on_quit(&mut self, _: &Quit, _: &mut Window, cx: &mut Context<Self>) {
-        cx.quit();
     }
 }
