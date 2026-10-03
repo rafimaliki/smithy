@@ -12,6 +12,8 @@ gpui = "0.2.2"
 ropey = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Delete to the Recycle Bin (file tree menu).
+trash = "5"
 
 [profile.release]
 opt-level = 3

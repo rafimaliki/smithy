@@ -1,5 +1,9 @@
 //! File tree model: the open folder flattened into visible rows.
 //! Only expanded directories are read, so a big folder costs nothing until opened.
+mod context;
+pub mod icons;
+pub mod ops;
+pub mod rename;
 pub mod view;
 
 use std::collections::HashSet;
@@ -36,6 +40,13 @@ impl FileTree {
             self.expanded.insert(path.to_path_buf());
         }
         self.refresh();
+    }
+
+    /// Open `path` so an entry created inside it becomes visible.
+    pub fn expand(&mut self, path: &Path) {
+        if self.expanded.insert(path.to_path_buf()) {
+            self.refresh();
+        }
     }
 
     pub fn refresh(&mut self) {

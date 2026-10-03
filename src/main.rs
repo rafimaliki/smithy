@@ -1,6 +1,7 @@
 mod actions;
 mod addon;
 mod app;
+mod assets;
 mod editor;
 mod keymap;
 mod settings;

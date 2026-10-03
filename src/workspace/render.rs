@@ -180,5 +180,6 @@ impl Render for Workspace {
                 .child(self.status_bar(&t, cx)),
         )
         .children(self.unsaved_prompt(&t, cx))
+        .children(self.delete_dialog(&t, cx))
     }
 }
