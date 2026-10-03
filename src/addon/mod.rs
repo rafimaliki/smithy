@@ -9,6 +9,7 @@
 //! [`all`]. `image_viewer.rs` is the reference.
 mod deps;
 pub mod image_viewer;
+pub mod markdown;
 mod registry;
 
 pub use deps::{resolve_disable, resolve_enable};
@@ -78,5 +79,8 @@ pub trait AddonInstance {
 
 /// Every add-on Smithy ships. One line per add-on.
 pub fn all() -> Vec<Box<dyn Addon>> {
-    vec![Box::new(image_viewer::ImageViewer)]
+    vec![
+        Box::new(image_viewer::ImageViewer),
+        Box::new(markdown::Markdown),
+    ]
 }
