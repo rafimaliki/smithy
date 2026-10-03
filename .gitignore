@@ -1,0 +1,14 @@
+# framery: generated
+framery/**/.cache/
+framery/**/exports/
+framery/**/.history/
+
+# node tooling (framery only)
+node_modules/
+
+# rust
+/target/
+
+# secrets: never commit tokens
+.env
+*.token

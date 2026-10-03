@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "framery": {
+      "command": "node",
+      "args": [
+        "node_modules/framery/bin/framery.mjs",
+        "mcp",
+        "--data",
+        "framery"
+      ]
+    }
+  }
+}
