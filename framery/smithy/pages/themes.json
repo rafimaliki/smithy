@@ -1,0 +1,10 @@
+{
+  "id": "themes",
+  "title": "Themes",
+  "items": [
+    {"type":"table","id":"theme-tokens","title":"Theme tokens (Nord Dark is the default)","columns":[{"id":"nord-dark","title":"Nord Dark"},{"id":"warm-graphite","title":"Warm graphite"},{"id":"midnight-indigo","title":"Midnight indigo"},{"id":"daylight","title":"Daylight"}],"rows":[{"id":"bg","title":"--bg","cells":{"nord-dark":"#131517","warm-graphite":"#2a2826","midnight-indigo":"#1f2133","daylight":"#fbfaf8"}},{"id":"side","title":"--side","cells":{"nord-dark":"#1a1b1d","warm-graphite":"#232120","midnight-indigo":"#1a1c2c","daylight":"#f2f0ec"}},{"id":"rail","title":"--rail","cells":{"nord-dark":"#1a1b1d","warm-graphite":"#1d1c1b","midnight-indigo":"#161826","daylight":"#e9e6e0"}},{"id":"line","title":"--line","cells":{"nord-dark":"#27282b","warm-graphite":"#37342f","midnight-indigo":"#2b2e45","daylight":"#dcd8d0"}},{"id":"ink","title":"--ink","cells":{"nord-dark":"#dbdbdb","warm-graphite":"#d8d3ca","midnight-indigo":"#c9cce3","daylight":"#24272e"}},{"id":"mute","title":"--mute","cells":{"nord-dark":"#80848a","warm-graphite":"#8b857a","midnight-indigo":"#7c80a0","daylight":"#7a7f89"}},{"id":"acc","title":"--acc","cells":{"nord-dark":"#70949e","warm-graphite":"#e0a458","midnight-indigo":"#8f8cf7","daylight":"#2f6fdb"}},{"id":"sel","title":"--sel","cells":{"nord-dark":"#26282b","warm-graphite":"#38342e","midnight-indigo":"#2c2f4a","daylight":"#e0e6f2"}},{"id":"add","title":"--add","cells":{"nord-dark":"#81b88b","warm-graphite":"#7cb96a","midnight-indigo":"#73c991","daylight":"#2da44e"}},{"id":"del","title":"--del","cells":{"nord-dark":"#c74e39","warm-graphite":"#e07a6b","midnight-indigo":"#f7768e","daylight":"#d1242f"}}],"marks":{},"w":1000,"h":624,"x":0,"y":0}
+  ],
+  "arrows": [
+
+  ]
+}
