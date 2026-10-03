@@ -134,22 +134,13 @@ impl Repo {
             .map(|e| (e.id(), e.filemode() as u32)))
     }
 
+    /// Staged text, lossy; for tests that compare plain text.
+    #[cfg(test)]
     pub fn index_content(&self, rel: &str) -> Result<Option<String>, git2::Error> {
         let index = self.inner().index()?;
         Ok(index
             .get_path(Path::new(rel), 0)
             .and_then(|e| self.inner().find_blob(e.id).ok())
-            .map(|b| String::from_utf8_lossy(b.content()).into_owned()))
-    }
-
-    pub fn head_content(&self, rel: &str) -> Result<Option<String>, git2::Error> {
-        let Some(tree) = super::repo::head_tree(self.inner())? else {
-            return Ok(None);
-        };
-        Ok(tree
-            .get_path(Path::new(rel))
-            .ok()
-            .and_then(|e| self.inner().find_blob(e.id()).ok())
             .map(|b| String::from_utf8_lossy(b.content()).into_owned()))
     }
 
