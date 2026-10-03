@@ -82,6 +82,7 @@ impl Workspace {
     fn close_now(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
         let name = self.tab_label(i);
         self.tabs.close(i);
+        super::watch::sync(self);
         self.show_toast(name, window, cx);
     }
 

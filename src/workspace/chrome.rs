@@ -2,7 +2,9 @@
 //! the reopen toast and the unsaved-changes prompt live in `tabs_view.rs`.
 use super::{Sidebar, TabContent, Workspace};
 use crate::theme::{on_accent, Theme};
-use gpui::{div, prelude::*, px, AnyElement, Context, SharedString, Stateful};
+use gpui::{
+    div, prelude::*, px, AnyElement, Context, MouseButton, MouseDownEvent, SharedString, Stateful,
+};
 
 fn rail_button(id: &'static str, glyph: &'static str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
     div()
@@ -99,6 +101,25 @@ impl Workspace {
         let mut right = div().ml_auto().flex().gap(px(18.));
         if let Some(tab) = self.tabs.active_tab() {
             if let TabContent::Editor(e, _) = &tab.content {
+                let wraps = e.read(cx).wraps();
+                let editor = e.clone();
+                right = right.child(
+                    div()
+                        .id("status-wrap")
+                        .cursor_pointer()
+                        .text_color(t.mute)
+                        .hover(|d| d.text_color(t.ink))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |_, _: &MouseDownEvent, _, cx| {
+                                editor.update(cx, |view, cx| {
+                                    let on = !view.wraps();
+                                    view.set_wrap(on, cx);
+                                });
+                            }),
+                        )
+                        .child(if wraps { "Wrap on" } else { "Wrap off" }),
+                );
                 let s = &e.read(cx).state;
                 let (l, c) = s.line_col(s.cursor);
                 right = right.child(format!("Ln {}, Col {}", l + 1, c + 1));

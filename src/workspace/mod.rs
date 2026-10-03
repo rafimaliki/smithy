@@ -1,12 +1,14 @@
 //! The window's root view: open folder, tabs, sidebar, add-on registry.
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
 mod actions;
+mod banner;
 mod chrome;
 mod dialog;
 mod lang_menu;
 mod launch;
 pub(crate) mod menu;
 mod render;
+mod settings_github;
 mod settings_languages;
 mod settings_shortcuts;
 mod settings_shortcuts_view;
@@ -15,6 +17,7 @@ mod tab_menu;
 pub mod tab_set;
 mod tabs;
 mod tabs_view;
+pub(crate) mod watch;
 
 use crate::addon::{AddonContext, Registry};
 use crate::editor::load::{self, Loaded};
@@ -27,6 +30,7 @@ use gpui::{
     AnyView, Context, Entity, FocusHandle, Focusable, PathPromptOptions, SharedString,
     Subscription, Window,
 };
+use settings_github::GithubSettings;
 use settings_shortcuts::Capture;
 use settings_view::SettingsSection;
 use std::path::{Path, PathBuf};
@@ -40,7 +44,12 @@ pub enum TabContent {
         view: AnyView,
         title: SharedString,
     },
-    /// Binary, too large, or unreadable: nothing is loaded, this explains why.
+    /// A binary file, never loaded; the screen offers Reveal in File Explorer.
+    Binary {
+        path: PathBuf,
+        size: u64,
+    },
+    /// Unreadable: nothing is loaded, this explains why.
     Notice(SharedString),
 }
 
@@ -65,6 +74,8 @@ pub struct Workspace {
     pub(crate) lang_menu: bool,
     /// Which settings section the pane shows.
     pub(crate) settings_section: SettingsSection,
+    /// Settings > GitHub, built only while the Pull requests add-on is on.
+    pub(crate) github_settings: Option<Entity<GithubSettings>>,
     /// What the settings page is taking keys for, if anything.
     pub(crate) capture: Option<Capture>,
     /// Text in the shortcuts search field.
@@ -82,6 +93,8 @@ pub struct Workspace {
     /// Path waiting on the delete-to-Recycle-Bin confirmation.
     pub(crate) pending_delete: Option<PathBuf>,
     pub(crate) error: Option<SharedString>,
+    /// Filesystem watcher for the open folder; `None` until one is open.
+    pub(crate) watch: Option<watch::Watch>,
     focus: FocusHandle,
     /// Keeps the keystroke interceptor alive for the window's life.
     _capture_sub: Subscription,
@@ -118,6 +131,7 @@ impl Workspace {
             show_settings: false,
             lang_menu: false,
             settings_section: SettingsSection::Appearance,
+            github_settings: None,
             capture: None,
             shortcut_filter: String::new(),
             pending_close: None,
@@ -127,6 +141,7 @@ impl Workspace {
             toast_seq: 0,
             pending_delete: None,
             error: None,
+            watch: None,
             focus: cx.focus_handle(),
             _capture_sub: capture_sub,
         }
@@ -201,6 +216,7 @@ impl Workspace {
         self.folder = Some(path.clone());
         self.update_settings(cx, |s| s.push_recent(path.clone()));
         self.restart_addons(cx);
+        watch::start(self, window, cx);
     }
 
     /// Drop every running add-on and start the enabled ones again for the current folder.
@@ -217,6 +233,29 @@ impl Workspace {
                 self.sidebar = Sidebar::Files;
             }
         }
+        self.sync_github_settings(cx);
+    }
+
+    /// Keep Settings > GitHub alive only while the Pull requests add-on is on.
+    fn sync_github_settings(&mut self, cx: &mut Context<Self>) {
+        if self.registry.instance("pull-requests").is_some() {
+            if self.github_settings.is_none() {
+                self.github_settings = Some(cx.new(GithubSettings::new));
+            }
+        } else {
+            self.github_settings = None;
+            if self.settings_section == SettingsSection::Github {
+                self.settings_section = SettingsSection::Appearance;
+            }
+        }
+    }
+
+    /// The Pull requests add-on's no-token state opens the settings page here.
+    pub(crate) fn open_github_settings(&mut self, cx: &mut Context<Self>) {
+        self.show_settings = true;
+        self.settings_section = SettingsSection::Github;
+        self.capture = None;
+        cx.notify();
     }
 
     pub fn set_addon(&mut self, id: &str, on: bool, cx: &mut Context<Self>) {
@@ -243,6 +282,7 @@ impl Workspace {
                 self.sidebar = Sidebar::Files;
             }
         }
+        self.sync_github_settings(cx);
     }
 
     // ---- tabs ---------------------------------------------------------------
@@ -260,6 +300,7 @@ impl Workspace {
             }
         }
         self.focus_tab(window, cx);
+        watch::sync(self);
         cx.notify();
     }
 
@@ -303,7 +344,11 @@ impl Workspace {
                 TabContent::Editor(editor, sub)
             }
             Loaded::Binary => {
-                TabContent::Notice("This is a binary file, so it is not loaded.".into())
+                let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                TabContent::Binary {
+                    path: path.to_path_buf(),
+                    size,
+                }
             }
             Loaded::TooLarge(n) => TabContent::Notice(
                 format!("This file is {} MB, too large to open.", n / (1024 * 1024)).into(),
@@ -326,7 +371,6 @@ impl Workspace {
         }
     }
 
-    /// Close tab `i`, asking first if it has unsaved edits.
     /// Gutter marks and blame for `path`, from whichever add-on has them.
     fn decorations_for(&self, path: &Path) -> crate::addon::EditorDecorations {
         let mut out = crate::addon::EditorDecorations::default();
@@ -375,6 +419,7 @@ impl Workspace {
             }
         }
         self.tabs.remap_paths(from, to);
+        watch::sync(self);
         cx.notify();
     }
 

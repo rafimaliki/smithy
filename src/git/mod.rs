@@ -3,6 +3,7 @@
 pub mod apply;
 pub mod inspect;
 pub mod model;
+pub mod pull;
 pub mod repo;
 
 pub use model::{
