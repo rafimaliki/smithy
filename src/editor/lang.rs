@@ -131,6 +131,29 @@ impl Lang {
     }
 }
 
+/// Every extension `Lang::from_extension` knows, for Settings > Languages.
+const EXTENSIONS: &[&str] = &[
+    "c", "h", "cs", "cpp", "cc", "cxx", "hpp", "hh", "css", "dart", "go", "html", "htm", "java",
+    "js", "mjs", "cjs", "jsx", "json", "kt", "kts", "md", "markdown", "ps1", "py", "rs", "sh",
+    "bash", "sql", "svg", "toml", "ts", "tsx", "xml", "yml", "yaml",
+];
+
+/// Built-in languages for Settings > Languages: the name and the extensions that
+/// map to it, in picker order.
+pub fn built_in() -> Vec<(&'static str, String)> {
+    Lang::ALL
+        .iter()
+        .map(|&lang| {
+            let exts: Vec<String> = EXTENSIONS
+                .iter()
+                .filter(|e| Lang::from_extension(e) == Some(lang))
+                .map(|e| format!(".{e}"))
+                .collect();
+            (lang.name(), exts.join(" "))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +185,21 @@ mod tests {
                 assert_ne!(a.name(), b.name(), "duplicate name");
             }
         }
+    }
+
+    #[test]
+    fn built_in_groups_extensions_under_one_language() {
+        let langs = built_in();
+        let (_, exts) = langs.iter().find(|(n, _)| *n == "TypeScript").unwrap();
+        assert_eq!(exts, ".ts");
+        let (_, exts) = langs.iter().find(|(n, _)| *n == "YAML").unwrap();
+        assert_eq!(exts, ".yml .yaml");
+        // Every language maps at least one extension, and none appears twice.
+        let mut names: Vec<&str> = langs.iter().map(|(n, _)| *n).collect();
+        let count = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), count);
+        assert!(langs.iter().all(|(_, e)| !e.is_empty()));
     }
 }

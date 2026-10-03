@@ -9,12 +9,14 @@
 //! [`all`]. `image_viewer.rs` is the reference.
 mod deps;
 pub mod image_viewer;
+pub mod markdown;
 mod registry;
 
 pub use deps::{resolve_disable, resolve_enable};
 pub use registry::Registry;
 
-use gpui::{AnyView, App, Window};
+use crate::editor::view::EditorView;
+use gpui::{AnyView, App, Entity, Window};
 use std::path::{Path, PathBuf};
 
 /// Static facts about an add-on, shown in Settings > Add-ons.
@@ -61,9 +63,24 @@ pub trait AddonInstance {
     fn viewer_for(&self, _path: &Path, _window: &mut Window, _cx: &mut App) -> Option<AnyView> {
         None
     }
+    /// A view that wraps the tab's editor for `path`, or `None` to leave the tab alone.
+    /// The core keeps the editor (saving, dirty state and the unsaved prompt are
+    /// unchanged) and renders this view instead of it; the view draws its own chrome
+    /// around the editor it is handed (Markdown: Code / Side by side / Preview).
+    fn document_view(
+        &self,
+        _path: &Path,
+        _editor: Entity<EditorView>,
+        _cx: &mut App,
+    ) -> Option<AnyView> {
+        None
+    }
 }
 
 /// Every add-on Smithy ships. One line per add-on.
 pub fn all() -> Vec<Box<dyn Addon>> {
-    vec![Box::new(image_viewer::ImageViewer)]
+    vec![
+        Box::new(image_viewer::ImageViewer),
+        Box::new(markdown::Markdown),
+    ]
 }
