@@ -2,9 +2,13 @@
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
 mod chrome;
 mod dialog;
+mod lang_menu;
 mod launch;
 pub(crate) mod menu;
 mod render;
+mod settings_languages;
+mod settings_shortcuts;
+mod settings_shortcuts_view;
 mod settings_view;
 pub mod tab_set;
 
@@ -20,12 +24,19 @@ use gpui::{
     AnyView, Context, Entity, FocusHandle, Focusable, PathPromptOptions, SharedString,
     Subscription, Window,
 };
+use settings_shortcuts::Capture;
+use settings_view::SettingsSection;
 use std::path::{Path, PathBuf};
 use tab_set::TabSet;
 
 pub enum TabContent {
     Editor(Entity<EditorView>, #[allow(dead_code)] Subscription),
     Viewer(AnyView),
+    /// An add-on's own view, e.g. the source-control diff.
+    Addon {
+        view: AnyView,
+        title: SharedString,
+    },
     /// Binary, too large, or unreadable: nothing is loaded, this explains why.
     Notice(SharedString),
 }
@@ -47,12 +58,22 @@ pub struct Workspace {
     /// Raw sidebar width while the divider is being dragged.
     pub(crate) drag: Option<f32>,
     pub(crate) show_settings: bool,
+    /// The status-bar language picker is open.
+    pub(crate) lang_menu: bool,
+    /// Which settings section the pane shows.
+    pub(crate) settings_section: SettingsSection,
+    /// What the settings page is taking keys for, if anything.
+    pub(crate) capture: Option<Capture>,
+    /// Text in the shortcuts search field.
+    pub(crate) shortcut_filter: String,
     /// Tab waiting on the unsaved-changes prompt.
     pub(crate) pending_close: Option<usize>,
     /// Path waiting on the delete-to-Recycle-Bin confirmation.
     pub(crate) pending_delete: Option<PathBuf>,
     pub(crate) error: Option<SharedString>,
     focus: FocusHandle,
+    /// Keeps the keystroke interceptor alive for the window's life.
+    _capture_sub: Subscription,
 }
 
 impl Focusable for Workspace {
@@ -63,6 +84,17 @@ impl Focusable for Workspace {
 
 impl Workspace {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        let handle = cx.entity();
+        let capture_sub = cx.intercept_keystrokes(move |e, _window, cx| {
+            let active = handle.read_with(cx, |this, _| this.capture.is_some());
+            if !active {
+                return;
+            }
+            let consumed = handle.update(cx, |this, cx| this.on_captured_key(&e.keystroke, cx));
+            if consumed {
+                cx.stop_propagation();
+            }
+        });
         Self {
             folder: None,
             registry: Registry::new(),
@@ -73,10 +105,15 @@ impl Workspace {
             sidebar_visible: true,
             drag: None,
             show_settings: false,
+            lang_menu: false,
+            settings_section: SettingsSection::Appearance,
+            capture: None,
+            shortcut_filter: String::new(),
             pending_close: None,
             pending_delete: None,
             error: None,
             focus: cx.focus_handle(),
+            _capture_sub: capture_sub,
         }
     }
 
@@ -124,6 +161,7 @@ impl Workspace {
         self.sidebar = Sidebar::Files;
         self.sidebar_visible = true;
         self.show_settings = false;
+        self.lang_menu = false;
         let tree = cx.new(|cx| TreeView::new(path.clone(), cx));
         self.tree_sub = Some(cx.subscribe_in(
             &tree,
@@ -152,6 +190,7 @@ impl Workspace {
         self.registry = Registry::new();
         let ctx = AddonContext {
             root: self.folder.clone(),
+            workspace: Some(cx.entity().downgrade()),
         };
         let enabled = cx.global::<Settings>().addons.clone();
         self.registry.start_enabled(&enabled, &ctx, cx);
@@ -166,6 +205,7 @@ impl Workspace {
         let enabled = cx.global::<Settings>().addons.clone();
         let ctx = AddonContext {
             root: self.folder.clone(),
+            workspace: Some(cx.entity().downgrade()),
         };
         let changed: Vec<&'static str> = if on {
             self.registry.enable(id, &enabled, &ctx, cx)
@@ -190,6 +230,9 @@ impl Workspace {
     // ---- tabs ---------------------------------------------------------------
 
     pub fn open_file(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+        if path.starts_with("<addon>") {
+            return;
+        }
         self.show_settings = false;
         match self.tabs.position(path) {
             Some(i) => self.tabs.active = i,
@@ -216,7 +259,12 @@ impl Workspace {
         match load::load(path) {
             Loaded::Text { text, read_only } => {
                 let state = EditorState::new(&text, Some(path.to_path_buf()), read_only);
-                let editor = cx.new(|cx| EditorView::new(state, cx));
+                let decorations = self.decorations_for(path);
+                let editor = cx.new(|cx| {
+                    let mut view = EditorView::new(state, cx);
+                    view.set_decorations(decorations);
+                    view
+                });
                 let sub = cx.observe(&editor, |_, _, cx| cx.notify());
                 TabContent::Editor(editor, sub)
             }
@@ -274,12 +322,55 @@ impl Workspace {
     }
 
     fn save_tab(&mut self, i: usize, cx: &mut Context<Self>) {
-        if let Some(TabContent::Editor(e, _)) = self.tabs.tabs.get(i).map(|t| &t.content) {
-            let result = e.update(cx, |e, cx| e.save(cx));
-            if let Err(err) = result {
-                self.error = Some(format!("Could not save: {err}").into());
+        let editor = match self.tabs.tabs.get(i).map(|t| &t.content) {
+            Some(TabContent::Editor(e, _)) => e.clone(),
+            _ => return,
+        };
+        let path = self.tabs.tabs[i].path.clone();
+        if let Err(err) = editor.update(cx, |e, cx| e.save(cx)) {
+            self.error = Some(format!("Could not save: {err}").into());
+        }
+        let decorations = self.decorations_for(&path);
+        editor.update(cx, |e, cx| {
+            e.set_decorations(decorations);
+            cx.notify();
+        });
+    }
+
+    /// Gutter marks and blame for `path`, from whichever add-on has them.
+    fn decorations_for(&self, path: &Path) -> crate::addon::EditorDecorations {
+        let mut out = crate::addon::EditorDecorations::default();
+        for (_, inst) in self.registry.running() {
+            if let Some(d) = inst.editor_decorations(path) {
+                out = d;
             }
         }
+        out
+    }
+
+    /// Open (or focus) an add-on view in the editor area, keyed by `key`.
+    pub fn open_addon_tab(
+        &mut self,
+        key: &str,
+        title: String,
+        view: AnyView,
+        cx: &mut Context<Self>,
+    ) {
+        self.show_settings = false;
+        let path = PathBuf::from(format!("<addon>/{key}"));
+        let title: SharedString = title.into();
+        match self.tabs.position(&path) {
+            Some(i) => {
+                self.tabs.active = i;
+                if let Some(tab) = self.tabs.tabs.get_mut(i) {
+                    tab.content = TabContent::Addon { view, title };
+                }
+            }
+            None => {
+                self.tabs.open(&path, || TabContent::Addon { view, title });
+            }
+        }
+        cx.notify();
     }
 
     /// A path moved on disk (renamed or cut and pasted): open tabs and their
@@ -306,6 +397,9 @@ impl Workspace {
     /// Rail click: the active view collapses the sidebar, another view shows it.
     pub(crate) fn select_sidebar(&mut self, s: Sidebar, cx: &mut Context<Self>) {
         let leaving_settings = std::mem::take(&mut self.show_settings);
+        if leaving_settings {
+            self.capture = None;
+        }
         if self.sidebar == s && self.sidebar_visible && !leaving_settings {
             self.sidebar_visible = false;
         } else {

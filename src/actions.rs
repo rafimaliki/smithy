@@ -28,6 +28,7 @@ actions!(
         Paste,
         SelectAll,
         Save,
+        ToggleBlame,
         // workspace
         ToggleSidebar,
         OpenFolder,
@@ -36,5 +37,7 @@ actions!(
         PrevTab,
         ReopenTab,
         Quit,
+        // Handled by the add-on that owns the tab's document view.
+        TogglePreview,
     ]
 );

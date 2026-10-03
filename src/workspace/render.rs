@@ -83,10 +83,23 @@ impl Workspace {
         if self.show_settings {
             return self.settings_view(t, cx).into_any_element();
         }
-        match self.tabs.active_tab().map(|tab| &tab.content) {
-            Some(TabContent::Editor(e, _)) => e.clone().into_any_element(),
-            Some(TabContent::Viewer(v)) => v.clone().into_any_element(),
-            Some(TabContent::Notice(msg)) => centered(t, msg.clone()).into_any_element(),
+        match self
+            .tabs
+            .active_tab()
+            .map(|tab| (&tab.content, tab.path.as_path()))
+        {
+            // An add-on that offers a document view for this path draws the tab instead.
+            Some((TabContent::Editor(e, _), path)) => {
+                for (_, inst) in self.registry.running() {
+                    if let Some(view) = inst.document_view(path, e.clone(), cx) {
+                        return view.into_any_element();
+                    }
+                }
+                e.clone().into_any_element()
+            }
+            Some((TabContent::Viewer(v), _)) => v.clone().into_any_element(),
+            Some((TabContent::Addon { view, .. }, _)) => view.clone().into_any_element(),
+            Some((TabContent::Notice(msg), _)) => centered(t, msg.clone()).into_any_element(),
             None => centered(t, "Open a file from the explorer.".into()).into_any_element(),
         }
     }
@@ -179,6 +192,7 @@ impl Render for Workspace {
                 )
                 .child(self.status_bar(&t, cx)),
         )
+        .children(self.lang_menu(&t, cx))
         .children(self.unsaved_prompt(&t, cx))
         .children(self.delete_dialog(&t, cx))
     }
