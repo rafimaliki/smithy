@@ -107,6 +107,7 @@ pub const CATALOG: &[Shortcut] = &[
     s!(Enter, "New line", "Editor", "enter", EDITOR),
     s!(Tab, "Indent", "Editor", "tab", EDITOR),
     s!(ToggleBlame, "Toggle blame", "Editor", "ctrl-alt-b", EDITOR),
+    s!(ToggleWrap, "Toggle word wrap", "Editor", "alt-z", EDITOR),
     // Answered by the Language servers add-on.
     s!(GoToDefinition, "Go to definition", "Editor", "f12", EDITOR),
     s!(

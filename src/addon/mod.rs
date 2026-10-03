@@ -12,6 +12,7 @@ pub mod image_viewer;
 pub mod lsp;
 pub mod markdown;
 pub mod pdf;
+pub mod pull_requests;
 mod registry;
 pub mod search;
 pub mod source_control;
@@ -199,6 +200,7 @@ pub fn all() -> Vec<Box<dyn Addon>> {
         Box::new(lsp::LanguageServers),
         Box::new(markdown::Markdown),
         Box::new(pdf::PdfViewer),
+        Box::new(pull_requests::PullRequests),
         Box::new(search::Search),
         Box::new(source_control::SourceControl),
     ]
