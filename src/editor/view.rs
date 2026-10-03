@@ -2,8 +2,11 @@
 //! `view/rows.rs` so this file stays about state.
 //! ponytail: no IME, no horizontal scroll, no wrap yet (word wrap is a core task in
 //! docs/tasks.md); upgrade: EntityInputHandler for IME, per-line shaped text.
+mod find_bar;
+mod input;
 mod rows;
 
+use super::find::FindState;
 use super::highlight::Highlighter;
 use super::lang::Lang;
 use super::layout::col_at_visual;
@@ -14,7 +17,7 @@ use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
     canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
-    KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
+    Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
 
 pub const MONO: &str = "Cascadia Mono";
@@ -37,6 +40,10 @@ pub struct EditorView {
     highlighter: Option<Highlighter>,
     /// Buffer revision the spans were built from; `u64::MAX` forces the first pass.
     hl_revision: u64,
+    /// Ctrl+F bar; `None` when it is closed.
+    find: Option<FindState>,
+    /// Buffer revision the matches were built from.
+    find_rev: u64,
 }
 
 impl Focusable for EditorView {
@@ -65,6 +72,8 @@ impl EditorView {
             lang,
             highlighter,
             hl_revision: u64::MAX,
+            find: None,
+            find_rev: u64::MAX,
         }
     }
 
@@ -110,6 +119,10 @@ impl EditorView {
                 self.hl_revision = rev;
             }
         }
+        if self.find.is_some() && rev != self.find_rev {
+            self.find_rev = rev;
+            self.find_recompute();
+        }
     }
 
     /// Write the buffer to its path and clear the dirty mark.
@@ -147,25 +160,6 @@ impl EditorView {
             .set_cursor_line_col(line, col_at_visual(&text, vcol), extend);
         cx.notify();
     }
-
-    fn key_down(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let m = e.keystroke.modifiers;
-        if m.control || m.alt || m.platform {
-            return;
-        }
-        // Windows reports the space bar as key "space" with no key_char.
-        let typed = match (e.keystroke.key_char.as_deref(), e.keystroke.key.as_str()) {
-            (Some(ch), _) => Some(ch),
-            (None, "space") => Some(" "),
-            _ => None,
-        };
-        if let Some(ch) = typed {
-            if !ch.chars().any(|c| c.is_control()) {
-                self.state.insert(ch);
-                self.changed(cx);
-            }
-        }
-    }
 }
 
 macro_rules! act {
@@ -193,10 +187,6 @@ impl EditorView {
     act!(end, End, |s, _cx| { s.end(false) });
     act!(select_home, SelectHome, |s, _cx| { s.home(true) });
     act!(select_end, SelectEnd, |s, _cx| { s.end(true) });
-    act!(backspace, Backspace, |s, _cx| { s.backspace() });
-    act!(delete, Delete, |s, _cx| { s.delete() });
-    act!(enter, Enter, |s, _cx| { s.insert("\n") });
-    act!(tab, Tab, |s, _cx| { s.insert("\t") });
     act!(undo, Undo, |s, _cx| { s.undo() });
     act!(redo, Redo, |s, _cx| { s.redo() });
     act!(select_all, SelectAll, |s, _cx| { s.select_all() });
@@ -257,6 +247,7 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::on_find))
             .relative()
             .size_full()
             .bg(theme.bg)
@@ -279,5 +270,6 @@ impl Render for EditorView {
                     .track_scroll(self.scroll.clone())
                     .size_full(),
             )
+            .children(self.find_bar(&theme, cx))
     }
 }

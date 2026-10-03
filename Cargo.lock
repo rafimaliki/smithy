@@ -5014,6 +5014,7 @@ dependencies = [
  "git2",
  "gpui",
  "pulldown-cmark",
+ "regex",
  "ropey",
  "serde",
  "serde_json",

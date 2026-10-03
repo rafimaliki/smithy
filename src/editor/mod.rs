@@ -1,5 +1,6 @@
 //! Core text editor: buffer, caret/selection model, highlighting, and the gpui view.
 pub mod buffer;
+pub mod find;
 pub mod grammars;
 pub mod highlight;
 pub mod lang;

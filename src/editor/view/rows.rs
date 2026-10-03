@@ -2,13 +2,14 @@
 //! and the syntax colored text of each line.
 use super::{EditorView, GUTTER, LINE_H};
 use crate::addon::{BlameLine, LineMark};
+use crate::editor::find;
 use crate::editor::highlight::{self, Kind};
 use crate::editor::layout::{expand_tabs, visual_col};
 use crate::settings::Settings;
-use crate::theme::Theme;
+use crate::theme::{on_accent, Theme};
 use gpui::{
     div, prelude::*, px, AnyElement, Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent,
-    SharedString, Stateful, Window,
+    Rgba, SharedString, Stateful, Window,
 };
 use std::ops::Range;
 
@@ -31,17 +32,32 @@ impl EditorView {
         let this = &*self;
         let blame_column = this.blame_column;
         let decorations = &this.decorations;
+        let finder = this.find.as_ref();
+        let current_line = finder.and_then(|f| f.current.map(|i| f.matches[i].line));
         range
             .map(|i| {
                 let text = this.state.buffer.line(i);
                 let start = this.state.buffer.line_start(i);
                 let len = text.chars().count();
+                let line_matches: Vec<(Range<usize>, bool)> = match finder {
+                    Some(f) => {
+                        let (base, matches) = find::on_line(&f.matches, i);
+                        matches
+                            .iter()
+                            .enumerate()
+                            .map(|(j, m)| (m.col.clone(), f.current == Some(base + j)))
+                            .collect()
+                    }
+                    None => Vec::new(),
+                };
                 let mut row = div()
                     .id(("line", i))
                     .relative()
                     .flex()
                     .h(px(LINE_H))
                     .w_full()
+                    // The line holding the current match, drawn under the highlights.
+                    .when(current_line == Some(i), |d| d.bg(fade(theme.sel, 0.7)))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, e: &MouseDownEvent, window, cx| {
@@ -111,7 +127,7 @@ impl EditorView {
                             .opacity(0.5),
                     );
                 }
-                body = body.child(this.text_row(&text, i, &theme));
+                body = body.child(this.text_row(&text, i, &theme, &line_matches));
                 if !blame_column && i == cursor_line {
                     if let Some(Some(blame)) = decorations.blame.get(i) {
                         body = body.child(inline_blame(blame, &theme));
@@ -134,34 +150,74 @@ impl EditorView {
             .collect()
     }
 
-    /// One line as colored runs: the highlight spans, with the gaps and any
-    /// unhighlighted line in the plain text color.
-    fn text_row(&self, text: &str, line: usize, theme: &Theme) -> Div {
+    /// One line as colored runs: the syntax spans with the find matches painted
+    /// over them. The current match gets the stronger background and dark text.
+    fn text_row(
+        &self,
+        text: &str,
+        line: usize,
+        theme: &Theme,
+        matches: &[(Range<usize>, bool)],
+    ) -> Div {
         let len = text.chars().count();
+        let mut row = div().flex().whitespace_nowrap();
+        if len == 0 {
+            return row;
+        }
+        // ponytail: per-char arrays like `highlight::segments`; lines over 10k
+        // chars (minified files) draw plain, matches included.
+        if len > 10_000 {
+            return row.child(piece(text, 0..len, None, None, theme));
+        }
         let spans = self
             .highlighter
             .as_ref()
             .map(|h| h.line_spans(line))
             .unwrap_or(&[]);
-        let mut row = div().flex().whitespace_nowrap();
-        let mut at = 0;
-        for (range, kind) in highlight::segments(len, spans) {
-            if range.start > at {
-                row = row.child(piece(text, at..range.start, None, theme));
+        let mut kind = vec![None; len];
+        for (range, k) in highlight::segments(len, spans) {
+            for slot in &mut kind[range] {
+                *slot = Some(k);
             }
-            row = row.child(piece(text, range.clone(), Some(kind), theme));
-            at = range.end;
         }
-        if at < len {
-            row = row.child(piece(text, at..len, None, theme));
+        let marks = if matches.is_empty() {
+            Vec::new()
+        } else {
+            let mut marks = vec![None; len];
+            for (range, current) in matches {
+                let start = range.start.min(len);
+                let end = range.end.min(len);
+                for slot in &mut marks[start..end] {
+                    *slot = Some(*current);
+                }
+            }
+            marks
+        };
+        let mark_at = |i: usize| marks.get(i).copied().flatten();
+        let mut i = 0;
+        while i < len {
+            let (k, m) = (kind[i], mark_at(i));
+            let mut j = i + 1;
+            while j < len && kind[j] == k && mark_at(j) == m {
+                j += 1;
+            }
+            row = row.child(piece(text, i..j, k, m, theme));
+            i = j;
         }
         row
     }
 }
 
 /// A colored slice of a line. Tabs expand inside the slice, the same as in the
-/// whole line, because expansion does not depend on the column.
-fn piece(text: &str, range: Range<usize>, kind: Option<Kind>, theme: &Theme) -> impl IntoElement {
+/// whole line, because expansion does not depend on the column. `mark` paints a
+/// find match: `Some(true)` is the current one.
+fn piece(
+    text: &str,
+    range: Range<usize>,
+    kind: Option<Kind>,
+    mark: Option<bool>,
+    theme: &Theme,
+) -> impl IntoElement {
     let s: String = text
         .chars()
         .skip(range.start)
@@ -171,7 +227,19 @@ fn piece(text: &str, range: Range<usize>, kind: Option<Kind>, theme: &Theme) -> 
         .flex_none()
         .whitespace_nowrap()
         .when_some(kind, |d, k| d.text_color(highlight::color(k, theme)))
+        .when_some(mark, |d, current| {
+            if current {
+                d.bg(fade(theme.acc, 0.75)).text_color(on_accent())
+            } else {
+                d.bg(fade(theme.acc, 0.38))
+            }
+        })
         .child(SharedString::from(expand_tabs(&s)))
+}
+
+/// `color` at a different alpha, for a background that lets the row show through.
+fn fade(color: Rgba, alpha: f32) -> Rgba {
+    Rgba { a: alpha, ..color }
 }
 
 /// True when line `i` starts a run of lines from the same commit.
