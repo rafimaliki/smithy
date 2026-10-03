@@ -86,6 +86,7 @@ impl Workspace {
         match self.tabs.active_tab().map(|tab| &tab.content) {
             Some(TabContent::Editor(e, _)) => e.clone().into_any_element(),
             Some(TabContent::Viewer(v)) => v.clone().into_any_element(),
+            Some(TabContent::Addon { view, .. }) => view.clone().into_any_element(),
             Some(TabContent::Notice(msg)) => centered(t, msg.clone()).into_any_element(),
             None => centered(t, "Open a file from the explorer.".into()).into_any_element(),
         }

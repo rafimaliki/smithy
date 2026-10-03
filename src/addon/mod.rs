@@ -10,11 +10,13 @@
 mod deps;
 pub mod image_viewer;
 mod registry;
+pub mod source_control;
 
 pub use deps::{resolve_disable, resolve_enable};
 pub use registry::Registry;
 
-use gpui::{AnyView, App, Window};
+use crate::workspace::Workspace;
+use gpui::{AnyView, App, WeakEntity, Window};
 use std::path::{Path, PathBuf};
 
 /// Static facts about an add-on, shown in Settings > Add-ons.
@@ -32,6 +34,9 @@ pub struct AddonContext {
     /// The open folder, if any.
     #[allow(dead_code)] // read by add-ons that work on the folder
     pub root: Option<PathBuf>,
+    /// The window's workspace. Lets an add-on open its view as a tab and ask for a
+    /// repaint after it changes something the chrome shows.
+    pub workspace: Option<WeakEntity<Workspace>>,
 }
 
 /// A button on the left rail that opens an add-on's sidebar view.
@@ -39,6 +44,37 @@ pub struct RailItem {
     /// Short label drawn in the rail button (no icon assets yet).
     pub glyph: &'static str,
     pub title: &'static str,
+}
+
+/// A mark the editor draws in the gutter beside a line.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LineMark {
+    Added,
+    Modified,
+}
+
+/// Blame for one line, as the editor shows it.
+#[derive(Clone)]
+pub struct BlameLine {
+    pub author: String,
+    pub age: String,
+    pub subject: String,
+}
+
+/// Per-line decorations for an open file, indexed from line 0.
+#[derive(Clone, Default)]
+pub struct EditorDecorations {
+    pub marks: Vec<Option<LineMark>>,
+    pub blame: Vec<Option<BlameLine>>,
+}
+
+/// Extra text for the status bar's left side.
+#[derive(Clone)]
+pub struct StatusInfo {
+    /// Branch name, or an explanation like "No repository".
+    pub branch: String,
+    /// A short detail, e.g. "3 changes"; may be empty.
+    pub detail: String,
 }
 
 pub trait Addon {
@@ -52,6 +88,10 @@ pub trait AddonInstance {
     fn rail(&self) -> Option<RailItem> {
         None
     }
+    /// A count drawn on the rail button, e.g. the number of changes.
+    fn rail_badge(&self, _cx: &App) -> Option<String> {
+        None
+    }
     /// The sidebar content. Shown while this add-on's rail button is active.
     fn sidebar_view(&self) -> Option<AnyView> {
         None
@@ -61,9 +101,21 @@ pub trait AddonInstance {
     fn viewer_for(&self, _path: &Path, _window: &mut Window, _cx: &mut App) -> Option<AnyView> {
         None
     }
+    /// Gutter marks and blame for a file the editor has open. The core calls it when
+    /// the file opens and after a save.
+    fn editor_decorations(&self, _path: &Path) -> Option<EditorDecorations> {
+        None
+    }
+    /// Extra text for the status bar's left side.
+    fn status(&self, _cx: &App) -> Option<StatusInfo> {
+        None
+    }
 }
 
 /// Every add-on Smithy ships. One line per add-on.
 pub fn all() -> Vec<Box<dyn Addon>> {
-    vec![Box::new(image_viewer::ImageViewer)]
+    vec![
+        Box::new(image_viewer::ImageViewer),
+        Box::new(source_control::SourceControl),
+    ]
 }

@@ -8,6 +8,7 @@ publish = false
 exclude = ["spike/gpui", "spike/egui"]
 
 [dependencies]
+git2 = { version = "0.21.0", default-features = false }
 gpui = "0.2.2"
 ropey = "1"
 serde = { version = "1", features = ["derive"] }

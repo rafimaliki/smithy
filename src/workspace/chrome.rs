@@ -10,6 +10,7 @@ use gpui::{
 fn rail_button(id: &'static str, glyph: &'static str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
     div()
         .id(id)
+        .relative()
         .w(px(48.))
         .h(px(40.))
         .flex()
@@ -20,6 +21,20 @@ fn rail_button(id: &'static str, glyph: &'static str, on: bool, t: &Theme) -> St
         .when(on, |d| d.border_l_2().border_color(t.acc))
         .hover(|d| d.text_color(t.ink))
         .child(glyph)
+}
+
+/// A small count on the rail button, e.g. the number of changes.
+fn badge(text: SharedString, t: &Theme) -> impl IntoElement {
+    div()
+        .absolute()
+        .top(px(4.))
+        .right(px(6.))
+        .px(px(4.))
+        .rounded(px(8.))
+        .bg(t.acc)
+        .text_color(on_accent())
+        .text_size(px(9.))
+        .child(text)
 }
 
 impl Workspace {
@@ -48,17 +63,20 @@ impl Workspace {
             );
         for (id, inst) in self.registry.running() {
             if let Some(item) = inst.rail() {
-                rail = rail.child(
-                    rail_button(
-                        id,
-                        item.glyph,
-                        shown && self.sidebar == Sidebar::Addon(id),
-                        t,
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.select_sidebar(Sidebar::Addon(id), cx)
-                    })),
+                let count = inst.rail_badge(cx);
+                let mut button = rail_button(
+                    id,
+                    item.glyph,
+                    shown && self.sidebar == Sidebar::Addon(id),
+                    t,
+                )
+                .on_click(
+                    cx.listener(move |this, _, _, cx| this.select_sidebar(Sidebar::Addon(id), cx)),
                 );
+                if let Some(text) = count {
+                    button = button.child(badge(text.into(), t));
+                }
+                rail = rail.child(button);
             }
         }
         rail.child(div().flex_1()).child(
@@ -83,11 +101,15 @@ impl Workspace {
             let active = i == self.tabs.active && !self.show_settings;
             let dirty = self.is_dirty(i, cx);
             let pinned = tab.pinned;
-            let name = tab
-                .path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
+            let name: SharedString = match &tab.content {
+                TabContent::Addon { title, .. } => title.clone(),
+                _ => tab
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+                    .into(),
+            };
             let group: SharedString = format!("tab-{i}").into();
             let slot = div()
                 .relative()
@@ -156,7 +178,7 @@ impl Workspace {
                         }),
                     )
                     .when(pinned, |d| d.child(div().text_color(t.acc).child("▪")))
-                    .child(SharedString::from(name))
+                    .child(name)
                     .when(!pinned, |d| d.child(slot)),
             );
         }
@@ -182,7 +204,7 @@ impl Workspace {
             .and_then(|f| f.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        div()
+        let mut bar = div()
             .h(px(24.))
             .flex_none()
             .flex()
@@ -194,11 +216,26 @@ impl Workspace {
             .border_color(t.line)
             .text_size(px(12.))
             .text_color(t.mute)
-            .child(div().text_color(t.ink).child(SharedString::from(folder)))
-            .when_some(self.error.clone(), |d, e| {
-                d.child(div().text_color(t.del).child(e))
-            })
-            .child(right)
+            .child(div().text_color(t.ink).child(SharedString::from(folder)));
+        for (_, inst) in self.registry.running() {
+            let Some(status) = inst.status(cx) else {
+                continue;
+            };
+            bar = bar.child(
+                div()
+                    .flex()
+                    .gap(px(5.))
+                    .text_color(t.ink)
+                    .child(SharedString::from(status.branch)),
+            );
+            if !status.detail.is_empty() {
+                bar = bar.child(SharedString::from(status.detail));
+            }
+        }
+        bar.when_some(self.error.clone(), |d, e| {
+            d.child(div().text_color(t.del).child(e))
+        })
+        .child(right)
     }
 
     /// Modal shown when closing a tab with unsaved edits.

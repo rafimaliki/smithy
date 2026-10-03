@@ -4,18 +4,20 @@
 use super::layout::{col_at_visual, expand_tabs, visual_col};
 use super::state::EditorState;
 use crate::actions::*;
+use crate::addon::{BlameLine, EditorDecorations, LineMark};
 use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
-    canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Render, ScrollStrategy,
-    SharedString, UniformListScrollHandle, Window,
+    canvas, div, font, prelude::*, px, AnyElement, Bounds, ClipboardItem, Context, FocusHandle,
+    Focusable, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Render,
+    ScrollStrategy, SharedString, UniformListScrollHandle, Window,
 };
 use std::ops::Range;
 
 pub const MONO: &str = "Cascadia Mono";
 const LINE_H: f32 = 21.0;
 const GUTTER: f32 = 64.0;
+const BLAME_W: f32 = 170.0;
 
 pub struct EditorView {
     pub state: EditorState,
@@ -23,6 +25,10 @@ pub struct EditorView {
     scroll: UniformListScrollHandle,
     bounds: Bounds<Pixels>,
     char_w: f32,
+    /// Gutter marks and blame supplied by an add-on; empty without one.
+    decorations: EditorDecorations,
+    /// Ctrl+Alt+B: show the full blame column instead of the caret-line label.
+    blame_column: bool,
 }
 
 impl Focusable for EditorView {
@@ -39,7 +45,19 @@ impl EditorView {
             scroll: UniformListScrollHandle::new(),
             bounds: Bounds::default(),
             char_w: 8.0,
+            decorations: EditorDecorations::default(),
+            blame_column: false,
         }
+    }
+
+    /// Replace the gutter marks and blame, e.g. after an add-on refreshed.
+    pub fn set_decorations(&mut self, decorations: EditorDecorations) {
+        self.decorations = decorations;
+    }
+
+    fn toggle_blame(&mut self, _: &ToggleBlame, _: &mut Window, cx: &mut Context<Self>) {
+        self.blame_column = !self.blame_column;
+        cx.notify();
     }
 
     pub fn focus(&self, window: &mut Window) {
@@ -92,6 +110,8 @@ impl EditorView {
         let (cursor_line, cursor_col) = self.state.line_col(self.state.cursor);
         let (sel_a, sel_b) = self.state.selection();
         let char_w = self.char_w;
+        let blame_column = self.blame_column;
+        let decorations = &self.decorations;
         range
             .map(|i| {
                 let text = self.state.buffer.line(i);
@@ -99,6 +119,7 @@ impl EditorView {
                 let len = text.chars().count();
                 let mut row = div()
                     .id(("line", i))
+                    .relative()
                     .flex()
                     .h(px(LINE_H))
                     .w_full()
@@ -114,6 +135,14 @@ impl EditorView {
                             this.click(i, e.position.x, true, cx);
                         }
                     }))
+                    .when(blame_column, |d| {
+                        // Only the first line of a commit group carries the label.
+                        let blame = match blame_group_start(&decorations.blame, i) {
+                            true => decorations.blame.get(i).and_then(|b| b.as_ref()),
+                            false => None,
+                        };
+                        d.child(blame_cell(blame, &theme))
+                    })
                     .child(
                         div()
                             .w(px(GUTTER))
@@ -123,6 +152,21 @@ impl EditorView {
                             .text_color(theme.mute)
                             .opacity(0.6)
                             .child(SharedString::from((i + 1).to_string())),
+                    )
+                    .when_some(
+                        mark_color(decorations.marks.get(i).copied().flatten(), &theme),
+                        |d, color| {
+                            d.child(
+                                div()
+                                    .absolute()
+                                    .left(px(48.))
+                                    .top(px(1.))
+                                    .bottom(px(1.))
+                                    .w(px(3.))
+                                    .rounded(px(2.))
+                                    .bg(color),
+                            )
+                        },
                     );
                 let mut body = div().relative().flex_1().h_full().overflow_hidden();
                 // Selection part on this line (a selected line break extends one cell).
@@ -153,6 +197,11 @@ impl EditorView {
                         .whitespace_nowrap()
                         .child(SharedString::from(expand_tabs(&text))),
                 );
+                if !blame_column && i == cursor_line {
+                    if let Some(Some(blame)) = decorations.blame.get(i) {
+                        body = body.child(inline_blame(blame, &theme));
+                    }
+                }
                 if focused && i == cursor_line {
                     body = body.child(
                         div()
@@ -240,6 +289,62 @@ impl EditorView {
     });
 }
 
+/// True when line `i` starts a run of lines from the same commit.
+fn blame_group_start(blame: &[Option<BlameLine>], i: usize) -> bool {
+    if i == 0 {
+        return true;
+    }
+    match (blame.get(i - 1), blame.get(i)) {
+        (Some(Some(a)), Some(Some(b))) => {
+            a.author != b.author || a.age != b.age || a.subject != b.subject
+        }
+        _ => true,
+    }
+}
+
+/// A three-column blame label: author and age on the first line of a group.
+fn blame_cell(blame: Option<&BlameLine>, theme: &Theme) -> AnyElement {
+    div()
+        .w(px(BLAME_W))
+        .flex_none()
+        .pr(px(8.))
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .font_family("Segoe UI")
+        .text_size(px(11.))
+        .text_color(theme.mute)
+        .opacity(0.85)
+        .child(SharedString::from(match blame {
+            Some(b) => format!("{} · {}", b.author, b.age),
+            None => String::new(),
+        }))
+        .into_any_element()
+}
+
+fn inline_blame(blame: &BlameLine, theme: &Theme) -> AnyElement {
+    div()
+        .ml(px(28.))
+        .flex_none()
+        .whitespace_nowrap()
+        .font_family("Segoe UI")
+        .text_size(px(12.))
+        .text_color(theme.mute)
+        .opacity(0.75)
+        .child(SharedString::from(format!(
+            "{}, {} · {}",
+            blame.author, blame.age, blame.subject
+        )))
+        .into_any_element()
+}
+
+fn mark_color(mark: Option<LineMark>, theme: &Theme) -> Option<gpui::Rgba> {
+    match mark {
+        Some(LineMark::Added) => Some(theme.add),
+        Some(LineMark::Modified) => Some(theme.acc),
+        None => None,
+    }
+}
+
 impl Render for EditorView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let settings = cx.global::<Settings>();
@@ -275,6 +380,7 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .on_action(cx.listener(Self::select_all))
+            .on_action(cx.listener(Self::toggle_blame))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))

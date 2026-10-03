@@ -47,6 +47,7 @@ fn defaults() -> Vec<Binding> {
         b!(Cut, "ctrl-x", EDITOR),
         b!(Paste, "ctrl-v", EDITOR),
         b!(SelectAll, "ctrl-a", EDITOR),
+        b!(ToggleBlame, "ctrl-alt-b", EDITOR),
         b!(Save, "ctrl-s", None),
         b!(ToggleSidebar, "ctrl-b", None),
         b!(OpenFolder, "ctrl-o", None),

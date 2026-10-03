@@ -28,6 +28,7 @@ actions!(
         Paste,
         SelectAll,
         Save,
+        ToggleBlame,
         // workspace
         ToggleSidebar,
         OpenFolder,
