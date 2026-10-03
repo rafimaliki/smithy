@@ -9,6 +9,7 @@ use super::lang::Lang;
 use super::layout::col_at_visual;
 use super::state::EditorState;
 use crate::actions::*;
+use crate::addon::EditorDecorations;
 use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
@@ -26,6 +27,10 @@ pub struct EditorView {
     scroll: UniformListScrollHandle,
     bounds: Bounds<Pixels>,
     char_w: f32,
+    /// Gutter marks and blame supplied by an add-on; empty without one.
+    decorations: EditorDecorations,
+    /// Ctrl+Alt+B: show the full blame column instead of the caret-line label.
+    blame_column: bool,
     /// The file's language: detected from the extension, or the picker's override.
     lang: Option<Lang>,
     /// `None` for plain text and for large files, which skip highlighting.
@@ -55,10 +60,22 @@ impl EditorView {
             scroll: UniformListScrollHandle::new(),
             bounds: Bounds::default(),
             char_w: 8.0,
+            decorations: EditorDecorations::default(),
+            blame_column: false,
             lang,
             highlighter,
             hl_revision: u64::MAX,
         }
+    }
+
+    /// Replace the gutter marks and blame, e.g. after an add-on refreshed.
+    pub fn set_decorations(&mut self, decorations: EditorDecorations) {
+        self.decorations = decorations;
+    }
+
+    fn toggle_blame(&mut self, _: &ToggleBlame, _: &mut Window, cx: &mut Context<Self>) {
+        self.blame_column = !self.blame_column;
+        cx.notify();
     }
 
     pub fn focus(&self, window: &mut Window) {
@@ -236,6 +253,7 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::undo))
             .on_action(cx.listener(Self::redo))
             .on_action(cx.listener(Self::select_all))
+            .on_action(cx.listener(Self::toggle_blame))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))

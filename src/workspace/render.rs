@@ -98,6 +98,7 @@ impl Workspace {
                 e.clone().into_any_element()
             }
             Some((TabContent::Viewer(v), _)) => v.clone().into_any_element(),
+            Some((TabContent::Addon { view, .. }, _)) => view.clone().into_any_element(),
             Some((TabContent::Notice(msg), _)) => centered(t, msg.clone()).into_any_element(),
             None => centered(t, "Open a file from the explorer.".into()).into_any_element(),
         }
