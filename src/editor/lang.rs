@@ -40,6 +40,19 @@ pub fn language_for(path: &Path) -> &'static str {
         .unwrap_or("Plain Text")
 }
 
+/// Built-in languages for Settings > Languages: the name and the extensions that
+/// map to it, in the order `TABLE` declares them.
+pub fn built_in() -> Vec<(&'static str, String)> {
+    let mut out: Vec<(&'static str, String)> = Vec::new();
+    for &(ext, name) in TABLE {
+        match out.iter_mut().find(|(n, _)| *n == name) {
+            Some((_, exts)) => exts.push_str(&format!(" .{ext}")),
+            None => out.push((name, format!(".{ext}"))),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -49,5 +62,21 @@ mod tests {
         assert_eq!(language_for(Path::new("A/B.TSX")), "TypeScript React");
         assert_eq!(language_for(Path::new("notes.xyz")), "Plain Text");
         assert_eq!(language_for(Path::new("Makefile")), "Plain Text");
+    }
+
+    #[test]
+    fn built_in_groups_extensions_under_one_language() {
+        let langs = built_in();
+        let (_, exts) = langs.iter().find(|(n, _)| *n == "TypeScript").unwrap();
+        assert_eq!(exts, ".ts");
+        let (_, exts) = langs.iter().find(|(n, _)| *n == "YAML").unwrap();
+        assert_eq!(exts, ".yml .yaml");
+        // Every language maps at least one extension, and none appears twice.
+        let mut names: Vec<&str> = langs.iter().map(|(n, _)| *n).collect();
+        let count = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), count);
+        assert!(langs.iter().all(|(_, e)| !e.is_empty()));
     }
 }
