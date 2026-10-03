@@ -51,6 +51,22 @@ Under 150 MB RAM idle and under 1 s cold start, measured on a release build with
 
 Risk: gpui is a git-only dependency with newer Windows support and API churn. Before any feature work, build a throwaway app that opens a window, scrolls a 50k-line file, renders a tree, accepts text input, and records RAM. If it fails, fall back to egui and update this file.
 
+### Result so far (2026-10-03, Windows 11, release build, empty window with a 50k-line virtual list)
+
+Throwaway code is in `spike/gpui` and `spike/egui`. Not yet tested: tree, text input, scrolling under load.
+
+| | gpui 0.2.2 (crates.io) | egui/eframe 0.31 |
+|---|---|---|
+| Builds on Windows 11 with MSVC Build Tools | yes, first try, 4m32s cold | yes, 1m10s cold |
+| Exe size | 10.9 MB | 4.9 MB |
+| Window handle appears (warm, 3 runs) | 557-674 ms | 188-189 ms |
+| First run after build | 1.3 s | 0.5 s |
+| Working set, idle | 132 MB (194 MB on the very first run) | 83-84 MB |
+| Private bytes, idle | 115 MB | 66 MB |
+| Renders and scrolls | yes (checked by screenshot) | not checked by screenshot |
+
+gpui is not a git-only dependency any more: `gpui = "0.2.2"` is on crates.io. The empty gpui window alone uses 132 of the 150 MB budget, so the file tree, buffers and tree-sitter would have to fit in about 18 MB. The 1 s cold-start target holds for both. Window-handle time is a rough proxy for first paint. The decision between gpui and egui is open.
+
 ## Rejected
 
 - Webview or Electron (Tauri included): works against the low-RAM goal.
