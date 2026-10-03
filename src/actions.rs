@@ -39,6 +39,8 @@ actions!(
         Quit,
         // Handled by the Search add-on; does nothing while it is off.
         SearchEverywhere,
+        // Handled by the Terminal add-on; does nothing while it is off.
+        ToggleTerminal,
         // Handled by the add-on that owns the tab's document view.
         TogglePreview,
     ]

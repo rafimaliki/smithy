@@ -2,6 +2,7 @@
 use super::Workspace;
 use crate::actions::{
     CloseTab, NextTab, OpenFolder, PrevTab, Quit, ReopenTab, Save, SearchEverywhere, ToggleSidebar,
+    ToggleTerminal,
 };
 use gpui::{Context, Window};
 
@@ -68,6 +69,19 @@ impl Workspace {
     ) {
         for (_, inst) in self.registry.running() {
             inst.toggle_search_everywhere(window, cx);
+        }
+        cx.notify();
+    }
+
+    /// Ctrl+backtick: hand the key to the add-on that owns the bottom panel.
+    pub(crate) fn on_toggle_terminal(
+        &mut self,
+        _: &ToggleTerminal,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for (_, inst) in self.registry.running() {
+            inst.toggle_bottom_panel(window, cx);
         }
         cx.notify();
     }
