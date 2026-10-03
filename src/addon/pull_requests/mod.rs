@@ -52,7 +52,7 @@ struct Instance {
 impl AddonInstance for Instance {
     fn rail(&self) -> Option<RailItem> {
         Some(RailItem {
-            glyph: "P",
+            icon: "icons/rail-prs.svg",
             title: "Pull requests",
         })
     }

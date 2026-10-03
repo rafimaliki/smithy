@@ -46,7 +46,7 @@ struct Instance {
 impl AddonInstance for Instance {
     fn rail(&self) -> Option<RailItem> {
         Some(RailItem {
-            glyph: "C",
+            icon: "icons/rail-changes.svg",
             title: "Source control",
         })
     }

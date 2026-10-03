@@ -1,4 +1,4 @@
-//! Embedded SVG assets for `svg()` elements: the file icons of the tree.
+//! Embedded SVG assets for `svg()` elements: the file icons of the tree and the rail icons.
 //!
 //! The brand marks come from Simple Icons (CC0 1.0, https://simpleicons.org), the
 //! app-defined list on the board's `icons` page; `file.svg` and `folder.svg` are
@@ -42,6 +42,26 @@ const ICONS: &[(&str, &[u8])] = &[
     (
         "icons/typescript.svg",
         include_bytes!("../assets/icons/typescript.svg"),
+    ),
+    (
+        "icons/rail-files.svg",
+        include_bytes!("../assets/icons/rail-files.svg"),
+    ),
+    (
+        "icons/rail-search.svg",
+        include_bytes!("../assets/icons/rail-search.svg"),
+    ),
+    (
+        "icons/rail-changes.svg",
+        include_bytes!("../assets/icons/rail-changes.svg"),
+    ),
+    (
+        "icons/rail-prs.svg",
+        include_bytes!("../assets/icons/rail-prs.svg"),
+    ),
+    (
+        "icons/rail-settings.svg",
+        include_bytes!("../assets/icons/rail-settings.svg"),
     ),
     ("icons/yaml.svg", include_bytes!("../assets/icons/yaml.svg")),
 ];

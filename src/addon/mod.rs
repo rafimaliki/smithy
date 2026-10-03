@@ -49,8 +49,8 @@ pub struct AddonContext {
 
 /// A button on the left rail that opens an add-on's sidebar view.
 pub struct RailItem {
-    /// Short label drawn in the rail button (no icon assets yet).
-    pub glyph: &'static str,
+    /// Asset path of the rail icon, e.g. `icons/rail-search.svg` (see `assets.rs`).
+    pub icon: &'static str,
     pub title: &'static str,
 }
 

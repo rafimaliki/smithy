@@ -47,7 +47,7 @@ struct Instance {
 impl AddonInstance for Instance {
     fn rail(&self) -> Option<RailItem> {
         Some(RailItem {
-            glyph: "⌕",
+            icon: "icons/rail-search.svg",
             title: "Search",
         })
     }
