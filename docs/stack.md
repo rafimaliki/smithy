@@ -71,6 +71,10 @@ gpui is not a git-only dependency any more: `gpui = "0.2.2"` is on crates.io. Th
 
 Own editor (ropey buffer, virtualized lines, typing, save, undo, unsaved prompt), file tree, tabs, no add-ons on: working set 108 MB right after open, 83 MB with a file open and after typing; private bytes 65-70 MB. Window handle in 0.58-0.66 s, measured through a PowerShell poll that adds its own overhead, so the real figure is lower. Both targets hold with room for tree-sitter, the watcher and the Search/Source control add-ons. The load check in the spike section is closed: gpui stays.
 
+### Final v1 build (all nine add-ons compiled in, none on, clean settings)
+
+Release exe 48 MB. Folder open: 107 MB working set / 78 MB private; 112 MB / 81 MB with a Rust file open and highlighted. Window handle in 0.94 s including the PowerShell poll that measures it. Both targets hold. Add-ons that start processes (terminal, language servers) are not part of this number, as agreed above. The exe grew from 12 MB to 48 MB because every add-on is compiled in; off add-ons cost disk, not RAM.
+
 ## Rejected
 
 - Webview or Electron (Tauri included): works against the low-RAM goal.
