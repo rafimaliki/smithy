@@ -1,0 +1,10 @@
+{
+  "id": "icons",
+  "title": "File icons",
+  "items": [
+    {"type":"table","id":"icon-map","title":"Extensions with a brand icon (app-defined list)","columns":[{"id":"icon","title":"Icon","note":"Brand mark from Simple Icons; marks that are black use a lighter tint so they show on dark themes"}],"rows":[{"id":"r0","title":"*.tsx","cells":{"icon":"React"}},{"id":"r1","title":"*.ts","cells":{"icon":"TypeScript"}},{"id":"r2","title":"tsconfig.json","cells":{"icon":"TypeScript"}},{"id":"r3","title":"*.kt","cells":{"icon":"Kotlin"}},{"id":"r4","title":"*.rs","cells":{"icon":"Rust"}},{"id":"r5","title":"*.json","cells":{"icon":"JSON"}},{"id":"r6","title":"package.json","cells":{"icon":"npm"}},{"id":"r7","title":"*.md","cells":{"icon":"Markdown"}},{"id":"r8","title":"*.yml / *.yaml","cells":{"icon":"YAML"}},{"id":"r9","title":"ci.yml in .github/workflows","cells":{"icon":"GitHub Actions"}},{"id":"r10","title":"*.toml","cells":{"icon":"TOML"}},{"id":"r11","title":".gitignore","cells":{"icon":"Git"}},{"id":"r12","title":"anything else","cells":{"icon":"Generic file icon (always the fallback)"}}],"marks":{},"w":430,"h":780,"x":0,"y":0}
+  ],
+  "arrows": [
+
+  ]
+}

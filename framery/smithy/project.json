@@ -6,6 +6,14 @@
     {
       "id": "flows",
       "title": "Flows"
+    },
+    {
+      "id": "themes",
+      "title": "Themes"
+    },
+    {
+      "id": "icons",
+      "title": "File icons"
     }
   ]
 }
