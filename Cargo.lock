@@ -5091,6 +5091,7 @@ dependencies = [
  "async-channel 2.5.0",
  "git2",
  "gpui",
+ "image",
  "notify",
  "pulldown-cmark",
  "ropey",
@@ -5119,6 +5120,7 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-xml",
  "tree-sitter-yaml",
+ "windows 0.57.0",
 ]
 
 [[package]]

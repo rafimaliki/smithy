@@ -8,7 +8,6 @@ publish = false
 exclude = ["spike/gpui", "spike/egui"]
 
 [dependencies]
-async-channel = "2"
 git2 = { version = "0.21.0", default-features = false }
 gpui = "0.2.2"
 notify = "8"
@@ -18,6 +17,19 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Delete to the Recycle Bin (file tree menu).
 trash = "5"
+
+# PDF viewer add-on: the Windows built-in renderer (Windows.Data.Pdf) rasterizes
+# pages; `image` decodes what it hands back and `async-channel` carries the
+# rendered pages from the render thread to the view.
+async-channel = "2"
+image = "0.25"
+windows = { version = "0.57", features = [
+    "Data_Pdf",
+    "Foundation",
+    "Storage",
+    "Storage_Streams",
+    "Win32_System_Com",
+] }
 
 # Syntax highlighting: one grammar per language, compiled in and loaded when a
 # file of that type opens. `tree-sitter` is the runtime; the rest are grammars
