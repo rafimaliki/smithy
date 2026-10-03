@@ -1,20 +1,21 @@
-//! The editing surface: caret, selection and input. Drawing a line lives in
-//! `view/rows.rs` so this file stays about state.
-//! ponytail: no IME, no horizontal scroll, no wrap yet (word wrap is a core task in
-//! docs/tasks.md); upgrade: EntityInputHandler for IME, per-line shaped text.
+//! The editing surface: caret, selection and input. Drawing a row lives in
+//! `view/rows.rs`, wrap and horizontal scroll in `view/wrap.rs`.
+//! ponytail: no IME; upgrade: EntityInputHandler for IME, per-line shaped text.
+mod gutter;
 mod rows;
+mod wrap;
 
 use super::highlight::Highlighter;
 use super::lang::Lang;
-use super::layout::col_at_visual;
 use super::state::EditorState;
+use super::wrap::WrapIndex;
 use crate::actions::*;
 use crate::addon::EditorDecorations;
 use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
     canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
-    KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
+    KeyDownEvent, Pixels, Render, UniformListScrollHandle, Window,
 };
 
 pub const MONO: &str = "Cascadia Mono";
@@ -37,6 +38,18 @@ pub struct EditorView {
     highlighter: Option<Highlighter>,
     /// Buffer revision the spans were built from; `u64::MAX` forces the first pass.
     hl_revision: u64,
+    /// Alt+Z or the status-bar item flips this; last choice is in `Settings`.
+    wrap: bool,
+    /// Rows for the buffer at the current width; `None` when wrap is off.
+    wrap_index: Option<WrapIndex>,
+    /// Buffer revision and column count `wrap_index` was built from.
+    wrap_key: (u64, usize),
+    /// Horizontal scroll in pixels; only used when wrap is off.
+    scroll_x: f32,
+    /// Widest logical line in display columns, bounding horizontal scroll.
+    max_cols: usize,
+    /// Buffer revision `max_cols` was measured at.
+    max_key: u64,
 }
 
 impl Focusable for EditorView {
@@ -54,6 +67,7 @@ impl EditorView {
         } else {
             lang.and_then(Highlighter::new)
         };
+        let wrap = cx.global::<Settings>().word_wrap;
         Self {
             state,
             focus: cx.focus_handle(),
@@ -65,6 +79,12 @@ impl EditorView {
             lang,
             highlighter,
             hl_revision: u64::MAX,
+            wrap,
+            wrap_index: None,
+            wrap_key: (u64::MAX, 0),
+            scroll_x: 0.0,
+            max_cols: 0,
+            max_key: u64::MAX,
         }
     }
 
@@ -125,26 +145,6 @@ impl EditorView {
     fn changed(&mut self, cx: &mut Context<Self>) {
         self.refresh_highlight();
         self.reveal_cursor();
-        cx.notify();
-    }
-
-    fn reveal_cursor(&self) {
-        let (line, _) = self.state.line_col(self.state.cursor);
-        let top = self.scroll.0.borrow().base_handle.logical_scroll_top().0;
-        let rows = ((f32::from(self.bounds.size.height) / LINE_H) as usize).max(1);
-        if line < top {
-            self.scroll.scroll_to_item(line, ScrollStrategy::Top);
-        } else if line + 1 >= top + rows {
-            self.scroll.scroll_to_item(line, ScrollStrategy::Bottom);
-        }
-    }
-
-    fn click(&mut self, line: usize, x: Pixels, extend: bool, cx: &mut Context<Self>) {
-        let rel = f32::from(x - self.bounds.left()) - GUTTER;
-        let vcol = (rel / self.char_w + 0.5).max(0.0) as usize;
-        let text = self.state.buffer.line(line);
-        self.state
-            .set_cursor_line_col(line, col_at_visual(&text, vcol), extend);
         cx.notify();
     }
 
@@ -229,11 +229,13 @@ impl Render for EditorView {
             self.char_w = f32::from(adv.width);
         }
         let entity = cx.entity();
-        let count = self.state.buffer.len_lines();
+        self.ensure_wrap(self.text_width());
+        let count = self.visual_row_count();
         div()
             .key_context("Editor")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::key_down))
+            .on_scroll_wheel(cx.listener(Self::scroll_wheel))
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))
             .on_action(cx.listener(Self::move_up))
@@ -254,6 +256,7 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::redo))
             .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::toggle_blame))
+            .on_action(cx.listener(Self::toggle_wrap))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))
