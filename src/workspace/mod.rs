@@ -201,6 +201,12 @@ impl Workspace {
             window,
             |this, _, e: &TreeEvent, window, cx| match e {
                 TreeEvent::Open(p) => this.open_file(p, window, cx),
+                TreeEvent::OpenTerminal(dir) => {
+                    for (_, inst) in this.registry.running() {
+                        inst.open_terminal_at(dir, window, cx);
+                    }
+                    cx.notify();
+                }
                 TreeEvent::DeleteRequested(p) => {
                     this.pending_delete = Some(p.clone());
                     cx.notify();

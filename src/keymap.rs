@@ -78,6 +78,7 @@ pub const CATALOG: &[Shortcut] = &[
         "ctrl-shift-v",
         None
     ),
+    s!(ToggleTerminal, "Toggle terminal", "View", "ctrl-`", None),
     // Editor
     s!(MoveLeft, "Move left", "Editor", "left", EDITOR),
     s!(MoveRight, "Move right", "Editor", "right", EDITOR),

@@ -79,6 +79,14 @@ impl Workspace {
             )
     }
 
+    /// The first add-on bottom panel that is open, drawn under the editor.
+    fn bottom_panel(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        self.registry
+            .running()
+            .find_map(|(_, inst)| inst.bottom_panel(cx))
+            .map(IntoElement::into_any_element)
+    }
+
     fn content(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         if self.show_settings {
             return self.settings_view(t, cx).into_any_element();
@@ -141,6 +149,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_prev_tab))
             .on_action(cx.listener(Self::on_reopen_tab))
             .on_action(cx.listener(Self::on_search_everywhere))
+            .on_action(cx.listener(Self::on_toggle_terminal))
             .on_action(cx.listener(Self::on_save))
             .on_action(cx.listener(Self::on_quit))
             .relative()
@@ -203,6 +212,7 @@ impl Render for Workspace {
                                 .relative()
                                 .child(self.tab_bar(&t, cx))
                                 .child(div().flex_1().min_h_0().child(self.content(&t, cx)))
+                                .when_some(self.bottom_panel(cx), |d, panel| d.child(panel))
                                 .children(self.toast(&t, cx)),
                         ),
                 )

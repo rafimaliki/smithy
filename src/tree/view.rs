@@ -17,6 +17,8 @@ use std::path::PathBuf;
 pub enum TreeEvent {
     /// A file row was clicked, or Enter was pressed on it.
     Open(PathBuf),
+    /// The folder menu asked for a terminal in this folder (Terminal add-on).
+    OpenTerminal(PathBuf),
     /// The user asked to delete; the workspace confirms and moves it to the Bin.
     DeleteRequested(PathBuf),
     /// A path moved on disk (rename or cut then paste); open tabs must follow.

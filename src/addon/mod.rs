@@ -16,6 +16,7 @@ pub mod pull_requests;
 mod registry;
 pub mod search;
 pub mod source_control;
+pub mod terminal;
 
 pub use deps::{resolve_disable, resolve_enable};
 pub use registry::Registry;
@@ -159,6 +160,15 @@ pub trait AddonInstance {
     }
     /// Ctrl+Shift+O reached the workspace: open or close the add-on's overlay.
     fn toggle_search_everywhere(&self, _window: &mut Window, _cx: &mut App) {}
+    /// The add-on's view for the bottom panel, or `None` while it has none open.
+    /// The core draws it under the editor, above the status bar.
+    fn bottom_panel(&self, _cx: &App) -> Option<AnyView> {
+        None
+    }
+    /// Ctrl+backtick reached the workspace: show or hide the bottom panel.
+    fn toggle_bottom_panel(&self, _window: &mut Window, _cx: &mut App) {}
+    /// The explorer asked to open a terminal in `dir` (folder menu).
+    fn open_terminal_at(&self, _dir: &Path, _window: &mut Window, _cx: &mut App) {}
     /// A view that wraps the tab's editor for `path`, or `None` to leave the tab alone.
     /// The core keeps the editor (saving, dirty state and the unsaved prompt are
     /// unchanged) and renders this view instead of it; the view draws its own chrome
@@ -203,5 +213,6 @@ pub fn all() -> Vec<Box<dyn Addon>> {
         Box::new(pull_requests::PullRequests),
         Box::new(search::Search),
         Box::new(source_control::SourceControl),
+        Box::new(terminal::Terminal),
     ]
 }
