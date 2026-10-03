@@ -194,6 +194,12 @@ impl Workspace {
                 );
             }
         }
+        // The empty part of the row moves the window; the window buttons belong to the
+        // group at the right edge only.
+        bar = bar.child(super::header::drag_area());
+        if !self.is_split() || right {
+            bar = bar.child(self.header_tail(t, cx));
+        }
         // Accept a tab dragged from the other group; only relevant while split.
         if self.is_split() {
             let entity = cx.entity();
