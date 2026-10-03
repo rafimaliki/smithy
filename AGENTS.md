@@ -2,7 +2,7 @@
 
 A lightweight, native Windows code editor: file-tree sidebar, editor, and a git/GitHub review view (working changes, branch-vs-branch diffs, pull requests viewed locally) for people who work with coding agents.
 
-Status: **design done, no app code yet**. Stack and features are in `docs/`, screens are on the framery board. The first code is the gpui spike described in `docs/stack.md`.
+Status: **v1 built** (core plus all nine add-ons, merged through PRs #4-#24). Stack and features are in `docs/`, screens and the build plan are on the framery board (page `flows`, page `plan`). Measured: about 110 MB working set idle with a folder open and no add-on on, window in under a second (see `docs/stack.md`). Not done: an installer, light-weight tuning of the 48 MB exe, and the hand checks listed under "Known gaps" in `docs/tasks.md`.
 
 ```
 npx framery          # design board (screens and flows)
@@ -23,7 +23,7 @@ cargo clippy -- -D warnings
 ```
 framery/smithy/   design board: screens and flows, edited through framery tools, not by hand
 docs/             stack.md and features.md; add files only when they have content
-src/              Rust code, by domain (tree, editor, git, github), once the stack is decided
+src/              Rust code by domain: editor, tree, workspace (window, tabs, chrome), addon (registry + one folder per add-on), git, github
 ```
 
 ## Code rules
@@ -60,6 +60,7 @@ src/              Rust code, by domain (tree, editor, git, github), once the sta
 |---|---|
 | `docs/stack.md` | choosing a crate or UI toolkit, or deciding where a feature's code lives (core or add-on) |
 | `docs/features.md` | deciding whether a feature belongs, and whether it is core or an add-on |
+| `docs/tasks.md` | picking up a task: how an agent works here and what each remaining piece needs |
 | `framery/smithy` (the board) | building any screen: read its frames and group descriptions first |
 
 ## Definition of done

@@ -43,3 +43,18 @@ Every add-on is off by default, gets a Settings > Add-ons row for free from the 
 # Measuring the core build
 
 After any core task, with an add-on-free build and one folder open, record the numbers in the PR: release build, idle working set (`Get-Process smithy | % WorkingSet64`), time to first window. Targets are in `docs/stack.md`.
+
+# Known gaps (end of the first build, PRs #4-#24)
+
+Every row of the plan table is merged. These were not verified by hand, because automated mouse input was unreliable on the shared desktop during the build, or need an outside account:
+
+- **Pull requests**: only the no-token state and the JSON mapping were exercised; no real GitHub token was available, so the PR list, checks dots and Review changes were never seen against github.com.
+- **Source control**: stage / unstage / discard / commit, compare with a branch and the side-by-side toggle are covered by tests on scratch repos but were not clicked through. Blame hover card and the "2 hunks" status item are not built.
+- **Language servers**: tested against `gopls`; `rust-analyzer` was not installed. Ctrl+Click, F12 and Alt+Left/Right were not fired in the running app. Hover signature tip is not built.
+- **PDF viewer**: zoom buttons and Fit width were not clicked; no keyboard scrolling.
+- **Terminal**: shell picker, tab close, and the "Open in Terminal" menu row were not clicked; fixed 280 px panel, no alternate screen.
+- **Split panes**: tab drag across the divider is implemented, not verified.
+- **Search**: Files and Symbols tabs and the Search everywhere keyboard path were seen only partly; Markdown, CSS, HTML, JSON, SQL, TOML, XML and YAML have no symbol rules.
+- **Editor**: Up/Down move by logical line under word wrap; no IME; the whole buffer is handed to tree-sitter on each edit.
+- **Size**: the release exe is 48 MB (tree-sitter grammars, git2, image, windows). `opt-level = "s"`, fat LTO or dropping rarely used grammars are the levers; not tried.
+- **Files over the 300-line soft ceiling** remain (largest: workspace/mod.rs, editor/view.rs, markdown/parse.rs); none is over 500.
