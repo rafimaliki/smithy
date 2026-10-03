@@ -5,7 +5,7 @@ Scope: the technology choices for Smithy and why. Read before adding a crate, ch
 | Area | Decision | Why |
 |---|---|---|
 | Language | Rust, Windows 11 only | Small native binary, low RAM. No other platform until asked. |
-| UI | gpui (Zed's toolkit), gated by a spike | Built for code editors; GPU text, low memory. |
+| UI | gpui 0.2.2 (Zed's toolkit, on crates.io); egui is the fallback | Built for code editors; GPU text. An empty window is 132 MB, so the RAM target is 200 MB (see Targets). |
 | Git | `git2` (libgit2) | Mature diff, status, blame, merge-base; no git install needed. Needs MSVC build tools. |
 | GitHub | REST API for PR list and metadata; `git2` fetches `refs/pull/N/head` | The diff is computed locally, same code path as branch compare. |
 | Auth | Personal access token in Windows Credential Manager (`keyring`) | Simplest; no OAuth app to register. Never on disk or in git. |
@@ -38,7 +38,7 @@ Crate names above are proposals; the spike and the first add-on settle them.
 
 ## Targets
 
-Under 150 MB RAM idle and under 1 s cold start, measured on a release build with **core only** and one folder open. Add-ons that start processes (language servers, terminal) are measured separately and are not part of this number. Checked in the definition of done.
+Under 200 MB RAM idle and under 1 s cold start, measured on a release build with **core only** and one folder open. Add-ons that start processes (language servers, terminal) are measured separately and are not part of this number. Checked in the definition of done. The RAM target was 150 MB until the spike showed an empty gpui window already uses 132 MB; it was loosened to 200 MB to keep gpui's text rendering. Still far below VS Code, which is why the product exists.
 
 ## Keeping it light
 
@@ -65,7 +65,7 @@ Throwaway code is in `spike/gpui` and `spike/egui`. Not yet tested: tree, text i
 | Private bytes, idle | 115 MB | 66 MB |
 | Renders and scrolls | yes (checked by screenshot) | not checked by screenshot |
 
-gpui is not a git-only dependency any more: `gpui = "0.2.2"` is on crates.io. The empty gpui window alone uses 132 of the 150 MB budget, so the file tree, buffers and tree-sitter would have to fit in about 18 MB. The 1 s cold-start target holds for both. Window-handle time is a rough proxy for first paint. The decision between gpui and egui is open.
+gpui is not a git-only dependency any more: `gpui = "0.2.2"` is on crates.io. The empty gpui window alone uses 132 MB, which is why the RAM target moved from 150 to 200 MB and gpui was kept. The 1 s cold-start target holds for both. Window-handle time is a rough proxy for first paint. Still to check before building features: RAM while typing and scrolling. If gpui passes 200 MB under load, reopen the egui decision.
 
 ## Rejected
 
