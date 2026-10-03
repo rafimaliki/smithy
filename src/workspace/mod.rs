@@ -230,6 +230,22 @@ impl Workspace {
         cx.notify();
     }
 
+    /// Open `path` and put the caret on `line` (0-based), scrolling it into view.
+    /// Used by the Search add-on to jump to a result.
+    pub fn open_file_at(
+        &mut self,
+        path: &Path,
+        line: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_file(path, window, cx);
+        if let Some(TabContent::Editor(editor, _)) = self.tabs.active_tab().map(|t| &t.content) {
+            editor.update(cx, |editor, cx| editor.goto_line(line, cx));
+        }
+        self.focus_tab(window, cx);
+    }
+
     fn make_content(
         &mut self,
         path: &Path,
@@ -432,6 +448,19 @@ impl Workspace {
         if let Some(p) = self.tabs.pop_closed() {
             self.open_file(&p, window, cx);
         }
+    }
+
+    /// Ctrl+Shift+O: hand the key to the add-on that owns Search everywhere.
+    pub(crate) fn on_search_everywhere(
+        &mut self,
+        _: &SearchEverywhere,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for (_, inst) in self.registry.running() {
+            inst.toggle_search_everywhere(window, cx);
+        }
+        cx.notify();
     }
 
     pub(crate) fn on_save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {

@@ -112,6 +112,13 @@ pub trait AddonInstance {
     fn status(&self, _cx: &App) -> Option<StatusInfo> {
         None
     }
+    /// A full-window overlay (e.g. Search everywhere), drawn over the editor
+    /// while the add-on says it is open. Only one is shown.
+    fn overlay(&self, _cx: &App) -> Option<AnyView> {
+        None
+    }
+    /// Ctrl+Shift+O reached the workspace: open or close the add-on's overlay.
+    fn toggle_search_everywhere(&self, _window: &mut Window, _cx: &mut App) {}
     /// A view that wraps the tab's editor for `path`, or `None` to leave the tab alone.
     /// The core keeps the editor (saving, dirty state and the unsaved prompt are
     /// unchanged) and renders this view instead of it; the view draws its own chrome
