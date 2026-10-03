@@ -99,6 +99,7 @@ pub const CATALOG: &[Shortcut] = &[
     s!(Delete, "Delete", "Editor", "delete", EDITOR),
     s!(Enter, "New line", "Editor", "enter", EDITOR),
     s!(Tab, "Indent", "Editor", "tab", EDITOR),
+    s!(ToggleBlame, "Toggle blame", "Editor", "ctrl-alt-b", EDITOR),
 ];
 
 fn shortcut(action: &str) -> Option<&'static Shortcut> {
