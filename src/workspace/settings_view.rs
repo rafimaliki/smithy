@@ -1,6 +1,9 @@
 //! Settings page: the section nav plus Appearance and Add-ons. Keyboard shortcuts
 //! and Languages live in their own modules.
-use super::Workspace;
+use super::{
+    settings_previews::{icon_card, theme_card},
+    Workspace,
+};
 use crate::theme::{on_accent, Theme, THEMES};
 use gpui::{div, prelude::*, px, AnyElement, Context, SharedString, Stateful};
 
@@ -34,22 +37,6 @@ fn chip(id: impl Into<gpui::ElementId>, label: &str, on: bool, t: &Theme) -> Sta
         .when(on, |d| d.bg(t.acc).text_color(on_accent()))
         .when(!on, |d| d.hover(|d| d.bg(t.hov)))
         .child(SharedString::from(label.to_string()))
-}
-
-/// A titled choice with the accent border when picked.
-fn card(id: impl Into<gpui::ElementId>, title: &str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .w(px(240.))
-        .px(px(14.))
-        .py(px(12.))
-        .rounded(px(8.))
-        .cursor_pointer()
-        .border_1()
-        .border_color(if on { t.acc } else { t.line })
-        .when(on, |d| d.bg(t.sel))
-        .when(!on, |d| d.hover(|d| d.bg(t.hov)))
-        .child(SharedString::from(title.to_string()))
 }
 
 fn heading(t: &Theme, text: &str) -> impl IntoElement {
@@ -157,30 +144,42 @@ impl Workspace {
     }
 
     fn appearance_section(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        let mut themes = div().flex().gap(px(8.)).mt(px(8.));
+        // Four 200 px cards per row, as on the board.
+        let mut themes = div()
+            .w(px(4. * 200. + 3. * 16.))
+            .flex()
+            .flex_wrap()
+            .gap(px(16.))
+            .mt(px(12.));
         for (i, th) in THEMES.iter().enumerate() {
             let name = th.name;
             themes = themes.child(
-                chip(("theme", i), name, self.settings(cx).theme == name, t).on_click(cx.listener(
-                    move |this, _, _, cx| this.update_settings(cx, |s| s.theme = name.into()),
-                )),
+                theme_card(("theme", i), th, self.settings(cx).theme == name, t).on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        this.update_settings(cx, |s| s.theme = name.into())
+                    }),
+                ),
             );
         }
 
         let icons = self.settings(cx).file_icons.clone();
         let icon_cards = div()
             .flex()
-            .gap(px(12.))
-            .mt(px(8.))
+            .gap(px(16.))
+            .mt(px(12.))
             .child(
-                card("icons-brand", "By file type", icons == "brand", t).on_click(cx.listener(
-                    |this, _, _, cx| this.update_settings(cx, |s| s.file_icons = "brand".into()),
-                )),
+                icon_card("icons-brand", "By file type", false, icons == "brand", t).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.update_settings(cx, |s| s.file_icons = "brand".into())
+                    }),
+                ),
             )
             .child(
-                card("icons-simple", "Simple", icons == "simple", t).on_click(cx.listener(
-                    |this, _, _, cx| this.update_settings(cx, |s| s.file_icons = "simple".into()),
-                )),
+                icon_card("icons-simple", "Simple", true, icons == "simple", t).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.update_settings(cx, |s| s.file_icons = "simple".into())
+                    }),
+                ),
             );
 
         let layout = self.settings(cx).diff_layout.clone();
