@@ -122,13 +122,18 @@ impl EditorView {
         cx.notify();
     }
 
+    /// The visual row holding `(line, col)`; the logical line when wrap is off.
+    pub(super) fn row_of_caret(&self, line: usize, col: usize) -> usize {
+        match &self.wrap_index {
+            Some(idx) => idx.row_of(line, col),
+            None => line,
+        }
+    }
+
     /// Scroll so the caret is on screen, horizontally too when wrap is off.
     pub(super) fn reveal_cursor(&mut self) {
         let (line, col) = self.state.line_col(self.state.cursor);
-        let row = match &self.wrap_index {
-            Some(idx) => idx.row_of(line, col),
-            None => line,
-        };
+        let row = self.row_of_caret(line, col);
         let top = self.scroll.0.borrow().base_handle.logical_scroll_top().0;
         let rows = ((f32::from(self.bounds.size.height) / LINE_H) as usize).max(1);
         if row < top {

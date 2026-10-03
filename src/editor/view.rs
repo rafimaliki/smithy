@@ -15,7 +15,7 @@ use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
     canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, FocusHandle, Focusable,
-    KeyDownEvent, Pixels, Render, UniformListScrollHandle, Window,
+    KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
 
 pub const MONO: &str = "Cascadia Mono";
@@ -130,6 +130,17 @@ impl EditorView {
                 self.hl_revision = rev;
             }
         }
+    }
+
+    /// Put the caret at the start of `line` (0-based) and centre it,
+    /// e.g. when a Search result is opened.
+    pub fn goto_line(&mut self, line: usize, cx: &mut Context<Self>) {
+        self.state.set_cursor_line_col(line, 0, false);
+        let (line, col) = self.state.line_col(self.state.cursor);
+        // With wrap on, a logical line spans several rows; the list is indexed by row.
+        let row = self.row_of_caret(line, col);
+        self.scroll.scroll_to_item(row, ScrollStrategy::Center);
+        cx.notify();
     }
 
     /// Write the buffer to its path and clear the dirty mark.

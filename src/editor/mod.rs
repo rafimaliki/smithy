@@ -6,7 +6,6 @@ pub mod lang;
 pub mod layout;
 pub mod load;
 pub mod state;
-#[allow(dead_code)] // ponytail: consumed by the Search add-on (a-search), not landed yet
 pub mod symbols;
 pub mod view;
 pub mod wrap;
