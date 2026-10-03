@@ -7,7 +7,6 @@ mod wrap;
 
 use super::highlight::Highlighter;
 use super::lang::Lang;
-use super::layout::col_at_visual;
 use super::load::{self, Loaded};
 use super::state::EditorState;
 use super::wrap::WrapIndex;
