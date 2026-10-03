@@ -45,7 +45,7 @@ pub fn segmented<T: 'static>(
                 .cursor_pointer()
                 .when(on, |d| d.bg(theme.sel).text_color(theme.ink))
                 .when(!on, |d| d.text_color(theme.mute))
-                .hover(|d| d.text_color(theme.ink))
+                .when(!on, |d| d.hover(|d| d.bg(theme.hov).text_color(theme.ink)))
                 .child(SharedString::from(label))
                 .on_click(cx.listener(move |this, _, _, cx| run(this, cx))),
         );

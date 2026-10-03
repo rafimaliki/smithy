@@ -37,7 +37,8 @@ impl Render for EverywhereView {
                     .cursor_pointer()
                     .when(self.tab == kind, |d| d.bg(theme.sel).text_color(theme.ink))
                     .when(self.tab != kind, |d| {
-                        d.text_color(theme.mute).hover(|d| d.text_color(theme.ink))
+                        d.text_color(theme.mute)
+                            .hover(|d| d.bg(theme.hov).text_color(theme.ink))
                     })
                     .child(SharedString::from(label))
                     .on_click(cx.listener(move |this, _, _, cx| this.set_tab(kind, cx))),

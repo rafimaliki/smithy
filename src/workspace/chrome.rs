@@ -6,9 +6,13 @@ use gpui::{
     div, prelude::*, px, AnyElement, Context, MouseButton, MouseDownEvent, SharedString, Stateful,
 };
 
-fn rail_button(id: &'static str, glyph: &'static str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
+fn rail_button(id: &'static str, icon: &'static str, on: bool, t: &Theme) -> Stateful<gpui::Div> {
+    // An svg is painted in its own text color, not the parent's, so the hover tone
+    // is set on the svg through the group.
+    let color = if on { t.ink } else { t.mute };
     div()
         .id(id)
+        .group(id)
         .relative()
         .w(px(48.))
         .h(px(40.))
@@ -16,10 +20,16 @@ fn rail_button(id: &'static str, glyph: &'static str, on: bool, t: &Theme) -> St
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .text_color(if on { t.ink } else { t.mute })
         .when(on, |d| d.border_l_2().border_color(t.acc))
-        .hover(|d| d.text_color(t.ink))
-        .child(glyph)
+        .child(
+            gpui::svg()
+                .path(icon)
+                .w(px(20.))
+                .h(px(20.))
+                .flex_none()
+                .text_color(color)
+                .group_hover(id, |s| s.text_color(t.ink)),
+        )
 }
 
 /// A small count on the rail button, e.g. the number of changes.
@@ -62,18 +72,26 @@ impl Workspace {
             .child(
                 rail_button(
                     "rail-files",
-                    "F",
+                    "icons/rail-files.svg",
                     shown && self.sidebar == Sidebar::Files,
                     t,
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.select_sidebar(Sidebar::Files, cx))),
             );
-        for (id, inst) in self.registry.running() {
+        // Registry order is not stable (a map), so the rail order is set here, as on the board.
+        let mut running: Vec<_> = self.registry.running().collect();
+        running.sort_by_key(|(id, _)| match *id {
+            "search" => 0,
+            "source-control" => 1,
+            "pull-requests" => 2,
+            _ => 3,
+        });
+        for (id, inst) in running {
             if let Some(item) = inst.rail() {
                 let count = inst.rail_badge(cx);
                 let mut button = rail_button(
                     id,
-                    item.glyph,
+                    item.icon,
                     shown && self.sidebar == Sidebar::Addon(id),
                     t,
                 )
@@ -87,13 +105,17 @@ impl Workspace {
             }
         }
         rail.child(div().flex_1()).child(
-            rail_button("rail-settings", "S", self.show_settings, t).on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.show_settings = !this.show_settings;
-                    this.capture = None;
-                    cx.notify();
-                },
-            )),
+            rail_button(
+                "rail-settings",
+                "icons/rail-settings.svg",
+                self.show_settings,
+                t,
+            )
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.show_settings = !this.show_settings;
+                this.capture = None;
+                cx.notify();
+            })),
         )
     }
 
