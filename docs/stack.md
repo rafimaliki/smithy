@@ -5,7 +5,7 @@ Scope: the technology choices for Smithy and why. Read before adding a crate, ch
 | Area | Decision | Why |
 |---|---|---|
 | Language | Rust, Windows 11 only | Small native binary, low RAM. No other platform until asked. |
-| UI | gpui (Zed's toolkit), gated by a spike | Built for code editors; GPU text, low memory. |
+| UI | gpui 0.2.2 (Zed's toolkit, on crates.io); egui is the fallback | Built for code editors; GPU text. An empty window is 132 MB, so the RAM target is 200 MB (see Targets). |
 | Git | `git2` (libgit2) | Mature diff, status, blame, merge-base; no git install needed. Needs MSVC build tools. |
 | GitHub | REST API for PR list and metadata; `git2` fetches `refs/pull/N/head` | The diff is computed locally, same code path as branch compare. |
 | Auth | Personal access token in Windows Credential Manager (`keyring`) | Simplest; no OAuth app to register. Never on disk or in git. |
@@ -38,7 +38,7 @@ Crate names above are proposals; the spike and the first add-on settle them.
 
 ## Targets
 
-Under 150 MB RAM idle and under 1 s cold start, measured on a release build with **core only** and one folder open. Add-ons that start processes (language servers, terminal) are measured separately and are not part of this number. Checked in the definition of done.
+Under 200 MB RAM idle and under 1 s cold start, measured on a release build with **core only** and one folder open. Add-ons that start processes (language servers, terminal) are measured separately and are not part of this number. Checked in the definition of done. The RAM target was 150 MB until the spike showed an empty gpui window already uses 132 MB; it was loosened to 200 MB to keep gpui's text rendering. Still far below VS Code, which is why the product exists.
 
 ## Keeping it light
 
@@ -50,6 +50,22 @@ Under 150 MB RAM idle and under 1 s cold start, measured on a release build with
 ## gpui spike (first code written)
 
 Risk: gpui is a git-only dependency with newer Windows support and API churn. Before any feature work, build a throwaway app that opens a window, scrolls a 50k-line file, renders a tree, accepts text input, and records RAM. If it fails, fall back to egui and update this file.
+
+### Result so far (2026-10-03, Windows 11, release build, empty window with a 50k-line virtual list)
+
+Throwaway code is in `spike/gpui` and `spike/egui`. Not yet tested: tree, text input, scrolling under load.
+
+| | gpui 0.2.2 (crates.io) | egui/eframe 0.31 |
+|---|---|---|
+| Builds on Windows 11 with MSVC Build Tools | yes, first try, 4m32s cold | yes, 1m10s cold |
+| Exe size | 10.9 MB | 4.9 MB |
+| Window handle appears (warm, 3 runs) | 557-674 ms | 188-189 ms |
+| First run after build | 1.3 s | 0.5 s |
+| Working set, idle | 132 MB (194 MB on the very first run) | 83-84 MB |
+| Private bytes, idle | 115 MB | 66 MB |
+| Renders and scrolls | yes (checked by screenshot) | not checked by screenshot |
+
+gpui is not a git-only dependency any more: `gpui = "0.2.2"` is on crates.io. The empty gpui window alone uses 132 MB, which is why the RAM target moved from 150 to 200 MB and gpui was kept. The 1 s cold-start target holds for both. Window-handle time is a rough proxy for first paint. Still to check before building features: RAM while typing and scrolling. If gpui passes 200 MB under load, reopen the egui decision.
 
 ## Rejected
 

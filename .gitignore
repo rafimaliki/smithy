@@ -12,3 +12,4 @@ node_modules/
 # secrets: never commit tokens
 .env
 *.token
+/spike/*/target
