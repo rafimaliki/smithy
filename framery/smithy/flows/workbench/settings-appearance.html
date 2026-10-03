@@ -6,7 +6,7 @@ body{background:var(--bg);color:var(--ink);font:13px/1.4 "Segoe UI",system-ui,sa
 .row:hover{background:var(--hov)}.row.active{background:var(--sel)}
 .chev{color:var(--mute);flex:none;margin-right:-2px}
 .nm{flex:1}.mod{width:6px;height:6px;border-radius:50%;background:var(--acc);margin-right:12px;flex:none;display:inline-block}
-.ic{flex:none;display:inline-flex;align-items:center;justify-content:center}
+.ic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px}
 .ic.box{width:16px;height:16px;border-radius:4px;font:700 8px/1 "Segoe UI";color:#14161a}
 .ic.txt{width:18px;font:700 10px/1 "JetBrains Mono","Cascadia Mono",Consolas,monospace;letter-spacing:-.5px}
 .ic.glyph{position:relative;width:14px;height:16px}.ic.glyph b{position:absolute;top:7px;left:0;right:0;text-align:center;font:700 6px/1 "Segoe UI"}
@@ -15,12 +15,12 @@ body{background:var(--bg);color:var(--ink);font:13px/1.4 "Segoe UI",system-ui,sa
 .num{width:56px;text-align:right;padding-right:18px;color:var(--mute);opacity:.6;font:12px/21px "JetBrains Mono","Cascadia Mono",Consolas,monospace}
 .tx{white-space:pre;font:13px/21px "JetBrains Mono","Cascadia Mono",Consolas,monospace}.k{color:var(--k)}.s{color:var(--s)}.f{color:var(--f)}.t{color:var(--t)}
 .g-add:before{content:"";position:absolute;left:46px;top:1px;bottom:1px;width:3px;border-radius:2px;background:var(--add)}
-.tabs{display:flex}.tab{display:flex;align-items:center;gap:8px;height:100%;padding:0 14px;color:var(--mute)}.tab.active{color:var(--ink)}.tab .mod{margin:0 0 0 2px}
+.tabs{display:flex}.tab{display:flex;align-items:center;gap:8px;height:100%;padding:0 14px;color:var(--mute)}.tab.active{color:var(--ink)}.tab .cs{width:16px;height:16px;display:grid;place-items:center;margin-left:4px;color:var(--mute);flex:none}.tab .cs .mod{margin:0}
 
 .main{flex:1;display:flex;min-height:0}
 .rail{width:48px;background:var(--rail);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px;border-right:1px solid var(--line)}
 .rail .b{width:48px;height:40px;display:grid;place-items:center;color:var(--mute)}.rail .b.on{color:var(--ink);box-shadow:inset 2px 0 var(--acc)}.rail .sp{flex:1}
-.side{width:260px;background:var(--side);border-right:1px solid var(--line)}
+.side{width:300px;background:var(--side);border-right:1px solid var(--line)}
 .side h6{font:600 11px/1 "Segoe UI";letter-spacing:.8px;color:var(--mute);padding:14px 14px 10px;text-transform:uppercase}
 .side .row{padding-left:14px}
 .pane{flex:1;padding:36px 56px;overflow:hidden}
@@ -28,7 +28,7 @@ h1{font:600 20px/1.2 "Segoe UI";margin-bottom:28px}h2{font:600 13px/1 "Segoe UI"
 .grid{display:grid;grid-template-columns:repeat(4,200px);gap:16px;margin-bottom:36px}
 .tc{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--side)}.tc.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
 .tn{display:flex;justify-content:space-between;align-items:center;padding:10px 12px}
-.field{display:flex;align-items:center;justify-content:space-between;width:832px;padding:12px 0;border-top:1px solid var(--line)}
+.field{display:flex;align-items:center;justify-content:space-between;width:848px;padding:12px 0;border-top:1px solid var(--line)}
 .grid2{display:grid;grid-template-columns:repeat(2,200px);gap:16px;margin-bottom:36px}.ip{padding:10px 12px;height:150px}.ir{display:flex;align-items:center;gap:8px;height:26px}.seg2{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}.seg2 span{padding:5px 14px;color:var(--mute)}.seg2 .on{background:var(--sel);color:var(--ink)}.step{display:flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:6px}.step span{padding:5px 14px}.step .v{border-left:1px solid var(--line);border-right:1px solid var(--line);min-width:52px;text-align:center}
 </style><body><div class="main">
 <div class="rail"><div class="b" id="nav-files"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 4.5c0-.8.7-1.5 1.5-1.5h3.6l1.6 1.8h5.8c.8 0 1.5.7 1.5 1.5v8.2c0 .8-.7 1.5-1.5 1.5h-11c-.8 0-1.5-.7-1.5-1.5z"/></svg></div><div class="b" id="nav-search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg></div><div class="b" id="nav-changes"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6" cy="5" r="2"/><circle cx="14" cy="15" r="2"/><path d="M6 7v4c0 2 1 4 4 4h2M14 13V9c0-2-1-4-4-4H8"/></svg></div><div class="b" id="nav-prs"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="5.5" cy="5" r="2"/><circle cx="5.5" cy="15" r="2"/><circle cx="14.5" cy="15" r="2"/><path d="M5.5 7v6M14.5 13V8c0-1.5-1-2.5-2.5-2.5H10m0 0l1.8-1.8M10 5.5l1.8 1.8"/></svg></div><div class="sp"></div><div class="b on" id="nav-settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></div></div>
