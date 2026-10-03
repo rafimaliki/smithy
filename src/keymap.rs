@@ -61,6 +61,7 @@ pub const CATALOG: &[Shortcut] = &[
     s!(Cut, "Cut", "Edit", "ctrl-x", EDITOR),
     s!(Paste, "Paste", "Edit", "ctrl-v", EDITOR),
     s!(SelectAll, "Select all", "Edit", "ctrl-a", EDITOR),
+    s!(Find, "Find in file", "Edit", "ctrl-f", EDITOR),
     // View
     s!(ToggleSidebar, "Toggle sidebar", "View", "ctrl-b", None),
     s!(

@@ -1,15 +1,17 @@
 //! Drawing the visible editor rows: gutter ticks and blame, selection, caret
 //! and the syntax colored text of each row. With word wrap on a logical line
 //! is several fixed-height rows; its number and marks stay on the first one.
+//! Find matches are painted over the syntax colors on the row's slice.
 use super::gutter::{blame_cell, blame_group_start, inline_blame, mark_color};
 use super::{EditorView, GUTTER, LINE_H};
+use crate::editor::find;
 use crate::editor::highlight::{self, Kind};
 use crate::editor::layout::{expand_tabs, visual_col};
 use crate::settings::Settings;
-use crate::theme::Theme;
+use crate::theme::{on_accent, Theme};
 use gpui::{
-    div, prelude::*, px, Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, SharedString,
-    Stateful, Window,
+    div, prelude::*, px, Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, Rgba,
+    SharedString, Stateful, Window,
 };
 use std::ops::Range;
 
@@ -31,6 +33,8 @@ impl EditorView {
         let this = &*self;
         let blame_column = this.blame_column;
         let decorations = &this.decorations;
+        let finder = this.find.as_ref();
+        let current_line = finder.and_then(|f| f.current.map(|i| f.matches[i].line));
         range
             .map(|i| {
                 let r = this.row_at(i);
@@ -41,12 +45,25 @@ impl EditorView {
                 let first = r.start == 0;
                 let last = r.end == len;
                 let vbase = visual_col(&text, r.start);
+                let line_matches: Vec<(Range<usize>, bool)> = match finder {
+                    Some(f) => {
+                        let (base, matches) = find::on_line(&f.matches, line);
+                        matches
+                            .iter()
+                            .enumerate()
+                            .map(|(j, m)| (m.col.clone(), f.current == Some(base + j)))
+                            .collect()
+                    }
+                    None => Vec::new(),
+                };
                 let mut row = div()
                     .id(("row", i))
                     .relative()
                     .flex()
                     .h(px(LINE_H))
                     .w_full()
+                    // The line holding the current match, drawn under the highlights.
+                    .when(current_line == Some(line), |d| d.bg(fade(theme.sel, 0.7)))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, e: &MouseDownEvent, window, cx| {
@@ -127,7 +144,8 @@ impl EditorView {
                         );
                     }
                 }
-                body = body.child(this.text_row(&text, line, r.start..r.end, &theme));
+                body =
+                    body.child(this.text_row(&text, line, r.start..r.end, &theme, &line_matches));
                 if !blame_column && last && line == cursor_line {
                     if let Some(Some(blame)) = decorations.blame.get(line) {
                         body = body.child(inline_blame(blame, &theme));
@@ -154,43 +172,92 @@ impl EditorView {
             .collect()
     }
 
-    /// Char columns `cols` of a line as colored runs: the highlight spans, with
-    /// the gaps and any unhighlighted part in the plain text color.
-    fn text_row(&self, text: &str, line: usize, cols: Range<usize>, theme: &Theme) -> Div {
+    /// Char columns `cols` of a line as colored runs: the highlight spans with
+    /// the find matches painted over them. The current match gets the stronger
+    /// background and dark text. The row carries the horizontal scroll offset.
+    fn text_row(
+        &self,
+        text: &str,
+        line: usize,
+        cols: Range<usize>,
+        theme: &Theme,
+        matches: &[(Range<usize>, bool)],
+    ) -> Div {
         let len = text.chars().count();
+        let mut row = div().flex().whitespace_nowrap().ml(px(-self.scroll_x));
+        let start = cols.start.min(len);
+        let end = cols.end.min(len);
+        if start >= end {
+            return row;
+        }
+        // ponytail: per-char arrays like `highlight::segments`; a line over 10k
+        // chars (minified files) draws plain, matches included.
+        if len > 10_000 {
+            return row.child(piece(text, start..end, None, None, theme));
+        }
         let spans = self
             .highlighter
             .as_ref()
             .map(|h| h.line_spans(line))
             .unwrap_or(&[]);
-        let mut row = div().flex().whitespace_nowrap().ml(px(-self.scroll_x));
-        let end = cols.end.min(len);
-        let mut at = cols.start;
-        for (range, kind) in highlight::segments(len, spans) {
-            if range.end <= cols.start {
+        let width = end - start;
+        let mut kind = vec![None; width];
+        for (range, k) in highlight::segments(len, spans) {
+            if range.end <= start {
                 continue;
             }
             if range.start >= end {
                 break;
             }
-            let from = range.start.max(cols.start);
-            let to = range.end.min(end);
-            if from > at {
-                row = row.child(piece(text, at..from, None, theme));
+            let from = range.start.max(start) - start;
+            let to = range.end.min(end) - start;
+            for slot in &mut kind[from..to] {
+                *slot = Some(k);
             }
-            row = row.child(piece(text, from..to, Some(kind), theme));
-            at = to;
         }
-        if at < end {
-            row = row.child(piece(text, at..end, None, theme));
+        let mut marks = vec![None; width];
+        for (range, current) in matches {
+            if range.end <= start {
+                continue;
+            }
+            if range.start >= end {
+                break;
+            }
+            let from = range.start.max(start) - start;
+            let to = range.end.min(end) - start;
+            for slot in &mut marks[from..to] {
+                *slot = Some(*current);
+            }
+        }
+        let mut i = 0;
+        while i < width {
+            let (k, m) = (kind[i], marks[i]);
+            let mut j = i + 1;
+            while j < width && kind[j] == k && marks[j] == m {
+                j += 1;
+            }
+            row = row.child(piece(text, start + i..start + j, k, m, theme));
+            i = j;
         }
         row
     }
 }
 
+/// `color` at a different alpha, for a background that lets the row show through.
+fn fade(color: Rgba, alpha: f32) -> Rgba {
+    Rgba { a: alpha, ..color }
+}
+
 /// A colored slice of a line. Tabs expand inside the slice, the same as in the
-/// whole line, because expansion does not depend on the column.
-fn piece(text: &str, range: Range<usize>, kind: Option<Kind>, theme: &Theme) -> impl IntoElement {
+/// whole line, because expansion does not depend on the column. `mark` paints a
+/// find match: `Some(true)` is the current one.
+fn piece(
+    text: &str,
+    range: Range<usize>,
+    kind: Option<Kind>,
+    mark: Option<bool>,
+    theme: &Theme,
+) -> impl IntoElement {
     let s: String = text
         .chars()
         .skip(range.start)
@@ -200,5 +267,12 @@ fn piece(text: &str, range: Range<usize>, kind: Option<Kind>, theme: &Theme) -> 
         .flex_none()
         .whitespace_nowrap()
         .when_some(kind, |d, k| d.text_color(highlight::color(k, theme)))
+        .when_some(mark, |d, current| {
+            if current {
+                d.bg(fade(theme.acc, 0.75)).text_color(on_accent())
+            } else {
+                d.bg(fade(theme.acc, 0.38))
+            }
+        })
         .child(SharedString::from(expand_tabs(&s)))
 }

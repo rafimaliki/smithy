@@ -1,10 +1,14 @@
 //! The editing surface: caret, selection and input. Drawing a row lives in
-//! `view/rows.rs`, wrap and horizontal scroll in `view/wrap.rs`.
+//! `view/rows.rs`, wrap and horizontal scroll in `view/wrap.rs`; the gutter and
+//! blame live in `view/gutter.rs`, and the Ctrl+F bar in `view/find_bar.rs`.
 //! ponytail: no IME; upgrade: EntityInputHandler for IME, per-line shaped text.
+mod find_bar;
 mod gutter;
+mod input;
 mod rows;
 mod wrap;
 
+use super::find::FindState;
 use super::highlight::Highlighter;
 use super::lang::Lang;
 use super::load::{self, Loaded};
@@ -16,7 +20,7 @@ use crate::settings::Settings;
 use crate::theme::Theme;
 use gpui::{
     canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, EventEmitter, FocusHandle,
-    Focusable, KeyDownEvent, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
+    Focusable, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -55,6 +59,10 @@ pub struct EditorView {
     highlighter: Option<Highlighter>,
     /// Buffer revision the spans were built from; `u64::MAX` forces the first pass.
     hl_revision: u64,
+    /// Ctrl+F bar; `None` when it is closed.
+    find: Option<FindState>,
+    /// Buffer revision the matches were built from.
+    find_rev: u64,
     /// Alt+Z or the status-bar item flips this; last choice is in `Settings`.
     wrap: bool,
     /// Rows for the buffer at the current width; `None` when wrap is off.
@@ -109,6 +117,8 @@ impl EditorView {
             lang,
             highlighter,
             hl_revision: u64::MAX,
+            find: None,
+            find_rev: u64::MAX,
             wrap,
             wrap_index: None,
             wrap_key: (u64::MAX, 0),
@@ -162,6 +172,10 @@ impl EditorView {
                 h.update(&self.state.buffer.text());
                 self.hl_revision = rev;
             }
+        }
+        if self.find.is_some() && rev != self.find_rev {
+            self.find_rev = rev;
+            self.find_recompute();
         }
     }
 
@@ -266,7 +280,6 @@ impl EditorView {
         self.reveal_cursor();
         cx.notify();
     }
-
     /// Column `col` of `line` as UTF-16 units, the way a language server counts.
     fn character(&self, line: usize, col: usize) -> u32 {
         self.state
@@ -302,25 +315,6 @@ impl EditorView {
         let character = self.character(line, col);
         self.emit_navigate(what, line as u32, character, cx);
     }
-
-    fn key_down(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let m = e.keystroke.modifiers;
-        if m.control || m.alt || m.platform {
-            return;
-        }
-        // Windows reports the space bar as key "space" with no key_char.
-        let typed = match (e.keystroke.key_char.as_deref(), e.keystroke.key.as_str()) {
-            (Some(ch), _) => Some(ch),
-            (None, "space") => Some(" "),
-            _ => None,
-        };
-        if let Some(ch) = typed {
-            if !ch.chars().any(|c| c.is_control()) {
-                self.state.insert(ch);
-                self.changed(cx);
-            }
-        }
-    }
 }
 
 macro_rules! act {
@@ -348,10 +342,6 @@ impl EditorView {
     act!(end, End, |s, _cx| { s.end(false) });
     act!(select_home, SelectHome, |s, _cx| { s.home(true) });
     act!(select_end, SelectEnd, |s, _cx| { s.end(true) });
-    act!(backspace, Backspace, |s, _cx| { s.backspace() });
-    act!(delete, Delete, |s, _cx| { s.delete() });
-    act!(enter, Enter, |s, _cx| { s.insert("\n") });
-    act!(tab, Tab, |s, _cx| { s.insert("\t") });
     act!(undo, Undo, |s, _cx| { s.undo() });
     act!(redo, Redo, |s, _cx| { s.redo() });
     act!(select_all, SelectAll, |s, _cx| { s.select_all() });
@@ -431,6 +421,7 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::on_find))
             .on_action(cx.listener(Self::goto_definition))
             .on_action(cx.listener(Self::find_references))
             .on_action(cx.listener(Self::nav_back))
@@ -457,5 +448,6 @@ impl Render for EditorView {
                     .track_scroll(self.scroll.clone())
                     .size_full(),
             )
+            .children(self.find_bar(&theme, cx))
     }
 }

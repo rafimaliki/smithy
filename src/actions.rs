@@ -28,6 +28,7 @@ actions!(
         Paste,
         SelectAll,
         Save,
+        Find,
         ToggleBlame,
         ToggleWrap,
         // Answered by the Language servers add-on; they do nothing while it is off.
