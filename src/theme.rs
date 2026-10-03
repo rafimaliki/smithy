@@ -3,7 +3,6 @@
 use gpui::{rgb, Rgba};
 
 #[derive(Clone, Copy)]
-#[allow(dead_code)] // add and the syntax colors are read by the diff and highlighting features
 pub struct Theme {
     pub name: &'static str,
     pub bg: Rgba,
@@ -15,6 +14,8 @@ pub struct Theme {
     pub acc: Rgba,
     pub sel: Rgba,
     pub hov: Rgba,
+    /// Git gutter: lines added.
+    #[allow(dead_code)] // ponytail: read by the source-control add-on; keep the token
     pub add: Rgba,
     pub del: Rgba,
     /// Syntax: keyword, string, function, type, comment.

@@ -1,6 +1,7 @@
 //! The window's root view: open folder, tabs, sidebar, add-on registry.
 //! Rendering lives in `render.rs` and `chrome.rs`; this file is state and behavior.
 mod chrome;
+mod lang_menu;
 mod launch;
 mod render;
 mod settings_view;
@@ -45,6 +46,8 @@ pub struct Workspace {
     /// Raw sidebar width while the divider is being dragged.
     pub(crate) drag: Option<f32>,
     pub(crate) show_settings: bool,
+    /// The status-bar language picker is open.
+    pub(crate) lang_menu: bool,
     /// Tab waiting on the unsaved-changes prompt.
     pub(crate) pending_close: Option<usize>,
     pub(crate) error: Option<SharedString>,
@@ -69,6 +72,7 @@ impl Workspace {
             sidebar_visible: true,
             drag: None,
             show_settings: false,
+            lang_menu: false,
             pending_close: None,
             error: None,
             focus: cx.focus_handle(),
@@ -118,6 +122,7 @@ impl Workspace {
         self.sidebar = Sidebar::Files;
         self.sidebar_visible = true;
         self.show_settings = false;
+        self.lang_menu = false;
         let tree = cx.new(|_| TreeView::new(path.clone()));
         self.tree_sub =
             Some(

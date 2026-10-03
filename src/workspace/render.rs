@@ -179,6 +179,7 @@ impl Render for Workspace {
                 )
                 .child(self.status_bar(&t, cx)),
         )
+        .children(self.lang_menu(&t, cx))
         .children(self.unsaved_prompt(&t, cx))
     }
 }
