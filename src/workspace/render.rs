@@ -186,13 +186,16 @@ impl Render for Workspace {
                                 .min_w_0()
                                 .flex()
                                 .flex_col()
+                                .relative()
                                 .child(self.tab_bar(&t, cx))
-                                .child(div().flex_1().min_h_0().child(self.content(&t, cx))),
+                                .child(div().flex_1().min_h_0().child(self.content(&t, cx)))
+                                .children(self.toast(&t, cx)),
                         ),
                 )
                 .child(self.status_bar(&t, cx)),
         )
         .children(self.lang_menu(&t, cx))
+        .children(self.tab_menu(&t, cx))
         .children(self.unsaved_prompt(&t, cx))
         .children(self.delete_dialog(&t, cx))
     }
