@@ -3,6 +3,7 @@
 //! is open. The act! handlers for everything else live in `view.rs`.
 use super::EditorView;
 use crate::actions::{Backspace, Delete, Enter, Tab};
+use crate::editor::edit_ops::indent_unit;
 use gpui::{Context, KeyDownEvent, Window};
 
 impl EditorView {
@@ -17,6 +18,14 @@ impl EditorView {
             (None, "space") => Some(" "),
             _ => None,
         };
+        if self.goto.is_some() {
+            if e.keystroke.key == "escape" {
+                self.goto_close(cx);
+            } else if let Some(ch) = typed {
+                self.goto_type(ch, cx);
+            }
+            return;
+        }
         if self.find.is_some() {
             match e.keystroke.key.as_str() {
                 "escape" => {
@@ -48,6 +57,10 @@ impl EditorView {
     }
 
     pub(super) fn backspace(&mut self, _: &Backspace, _: &mut Window, cx: &mut Context<Self>) {
+        if self.goto.is_some() {
+            self.goto_backspace(cx);
+            return;
+        }
         if self.find.is_some() {
             self.find_backspace(cx);
             return;
@@ -66,19 +79,41 @@ impl EditorView {
     }
 
     pub(super) fn enter(&mut self, _: &Enter, _: &mut Window, cx: &mut Context<Self>) {
-        if self.find.is_some() {
-            self.find_step(1, cx);
+        if self.goto.is_some() {
+            self.goto_commit(cx);
             return;
         }
-        self.state.insert("\n");
+        if let Some(f) = self.find.as_ref() {
+            if f.replace_open && f.in_replace {
+                self.replace_current(cx);
+            } else {
+                self.find_step(1, cx);
+            }
+            return;
+        }
+        self.state.newline_keeping_indent();
         self.changed(cx);
     }
 
     pub(super) fn tab(&mut self, _: &Tab, _: &mut Window, cx: &mut Context<Self>) {
-        if self.find.is_some() {
+        if self.goto.is_some() {
             return;
         }
-        self.state.insert("\t");
+        if let Some(f) = self.find.as_mut() {
+            // Tab moves between the find and replace fields.
+            if f.replace_open {
+                f.in_replace = !f.in_replace;
+                cx.notify();
+            }
+            return;
+        }
+        let (a, b) = self.state.selection();
+        if self.state.line_col(a).0 != self.state.line_col(b).0 {
+            self.state.indent_lines();
+        } else {
+            let unit = indent_unit(&self.state.buffer.text());
+            self.state.insert(unit);
+        }
         self.changed(cx);
     }
 }

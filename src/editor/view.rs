@@ -3,6 +3,7 @@
 //! blame live in `view/gutter.rs`, and the Ctrl+F bar in `view/find_bar.rs`.
 //! ponytail: no IME; upgrade: EntityInputHandler for IME, per-line shaped text.
 mod blink;
+mod commands;
 mod find_bar;
 mod gutter;
 mod gutter_menu;
@@ -22,8 +23,8 @@ use crate::settings::Settings;
 use crate::theme::Theme;
 use blink::Blink;
 use gpui::{
-    canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, EventEmitter, FocusHandle,
-    Focusable, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
+    canvas, div, font, prelude::*, px, Bounds, Context, EventEmitter, FocusHandle, Focusable,
+    Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
 };
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
@@ -70,6 +71,8 @@ pub struct EditorView {
     blink: Blink,
     /// Where the line-number menu is open, in window coordinates.
     gutter_menu: Option<gpui::Point<gpui::Pixels>>,
+    /// Ctrl+G: the line number typed so far; `None` when the bar is closed.
+    goto: Option<String>,
     /// Alt+Z or the status-bar item flips this; last choice is in `Settings`.
     wrap: bool,
     /// Rows for the buffer at the current width; `None` when wrap is off.
@@ -143,6 +146,7 @@ impl EditorView {
             find_rev: u64::MAX,
             blink: Blink::new(),
             gutter_menu: None,
+            goto: None,
             wrap,
             wrap_index: None,
             wrap_key: (u64::MAX, 0),
@@ -369,17 +373,6 @@ impl EditorView {
     act!(undo, Undo, |s, _cx| { s.undo() });
     act!(redo, Redo, |s, _cx| { s.redo() });
     act!(select_all, SelectAll, |s, _cx| { s.select_all() });
-    act!(copy, Copy, |s, cx| {
-        if s.has_selection() {
-            cx.write_to_clipboard(ClipboardItem::new_string(s.selected_text()));
-        }
-    });
-    act!(cut, Cut, |s, cx| {
-        if s.has_selection() && !s.read_only {
-            cx.write_to_clipboard(ClipboardItem::new_string(s.selected_text()));
-            s.insert("");
-        }
-    });
     act!(paste, Paste, |s, cx| {
         if let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) {
             s.insert(&text.replace("\r\n", "\n"));
@@ -446,6 +439,7 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::on_find))
+            .map(|d| Self::command_actions(d, cx))
             .on_action(cx.listener(Self::goto_definition))
             .on_action(cx.listener(Self::find_references))
             .on_action(cx.listener(Self::nav_back))
@@ -473,6 +467,7 @@ impl Render for EditorView {
                     .size_full(),
             )
             .children(self.find_bar(&theme, cx))
+            .children(self.goto_bar(&theme))
             .children(self.gutter_menu_view(&theme, cx))
     }
 }

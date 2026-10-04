@@ -89,6 +89,44 @@ pub fn find_all(text: &str, q: &FindQuery) -> Result<Vec<Match>, regex::Error> {
     Ok(out)
 }
 
+/// Replace every match of `q` in `text`; regex mode expands `$1`-style groups, the
+/// literal modes insert `replacement` as typed. Returns the new text and how many
+/// matches changed. Empty matches are left alone, as `find_all` skips them.
+pub fn replace_all(
+    text: &str,
+    q: &FindQuery,
+    replacement: &str,
+) -> Result<(String, usize), regex::Error> {
+    if q.text.is_empty() {
+        return Ok((text.to_string(), 0));
+    }
+    let re = Regex::new(&q.pattern())?;
+    let mut count = 0;
+    let out = re.replace_all(text, |caps: &regex::Captures| {
+        let whole = caps.get(0).map(|m| m.as_str()).unwrap_or("");
+        if whole.is_empty() {
+            return String::new();
+        }
+        count += 1;
+        if q.regex {
+            let mut dst = String::new();
+            caps.expand(replacement, &mut dst);
+            dst
+        } else {
+            replacement.to_string()
+        }
+    });
+    Ok((out.into_owned(), count))
+}
+
+/// The replacement for one match whose text is `matched`.
+pub fn replace_one(q: &FindQuery, matched: &str, replacement: &str) -> String {
+    match replace_all(matched, q, replacement) {
+        Ok((text, n)) if n > 0 => text,
+        _ => replacement.to_string(),
+    }
+}
+
 /// Number of chars between two byte offsets; counted here to keep `find_all`'s
 /// walk over matches already advanced.
 fn col_span(text: &str, start: usize, end: usize) -> usize {
@@ -134,6 +172,10 @@ pub struct FindState {
     pub current: Option<usize>,
     pub error: bool,
     moved: bool,
+    /// Ctrl+H: the replace row is open, and which field the keyboard types into.
+    pub replace: String,
+    pub replace_open: bool,
+    pub in_replace: bool,
 }
 
 impl FindState {
@@ -145,7 +187,15 @@ impl FindState {
             current: None,
             error: false,
             moved: false,
+            replace: String::new(),
+            replace_open: false,
+            in_replace: false,
         }
+    }
+
+    /// After a replacement the next search starts from here.
+    pub fn set_anchor(&mut self, line: usize, col: usize) {
+        self.anchor = (line, col);
     }
 
     /// Re-run the query; the bar goes back to its match at the anchor.
@@ -220,6 +270,24 @@ mod tests {
             .into_iter()
             .map(|m| (m.line, m.col))
             .collect()
+    }
+
+    #[test]
+    fn replace_all_is_literal_or_regex_and_skips_empty_matches() {
+        let (t, n) = replace_all("Busy busy", &q("busy"), "idle").unwrap();
+        assert_eq!((t.as_str(), n), ("idle idle", 2));
+        let mut re = q(r"(\w+)=(\d+)");
+        re.regex = true;
+        let (t, n) = replace_all("a=1 b=22", &re, "$2:$1").unwrap();
+        assert_eq!((t.as_str(), n), ("1:a 22:b", 2));
+        // Literal mode inserts a dollar sign as typed.
+        let (t, _) = replace_all("x", &q("x"), "$1").unwrap();
+        assert_eq!(t, "$1");
+        let mut empty = q("a*");
+        empty.regex = true;
+        let (t, n) = replace_all("baab", &empty, "-").unwrap();
+        assert_eq!((t.as_str(), n), ("b-b", 1));
+        assert_eq!(replace_one(&q("busy"), "BUSY", "idle"), "idle");
     }
 
     #[test]
