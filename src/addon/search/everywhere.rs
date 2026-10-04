@@ -53,6 +53,8 @@ pub struct EverywhereView {
     scroll: ScrollHandle,
     cancel: Cancel,
     task: Option<Task<()>>,
+    /// What had the keyboard before the modal opened; Esc hands it back.
+    previous: Option<FocusHandle>,
 }
 
 impl EverywhereView {
@@ -75,6 +77,7 @@ impl EverywhereView {
             scroll: ScrollHandle::new(),
             cancel: Cancel::new(),
             task: None,
+            previous: None,
         }
     }
 
@@ -88,7 +91,8 @@ impl EverywhereView {
     }
 
     /// Open with a fresh query and no results.
-    pub fn show(&mut self, cx: &mut Context<Self>) {
+    pub fn show(&mut self, previous: Option<FocusHandle>, cx: &mut Context<Self>) {
+        self.previous = previous;
         self.cancel.cancel();
         self.task = None;
         self.open = true;
@@ -101,6 +105,20 @@ impl EverywhereView {
         cx.notify();
     }
 
+    /// Open on one tab, e.g. Ctrl+P on Files.
+    pub fn show_tab(&mut self, tab: Kind, previous: Option<FocusHandle>, cx: &mut Context<Self>) {
+        self.show(previous, cx);
+        self.tab = tab;
+    }
+
+    /// Close and give the keyboard back, so shortcuts keep working.
+    pub fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close(cx);
+        if let Some(previous) = self.previous.take() {
+            window.focus(&previous);
+        }
+    }
+
     pub fn close(&mut self, cx: &mut Context<Self>) {
         self.cancel.cancel();
         self.task = None;
@@ -111,7 +129,7 @@ impl EverywhereView {
 
     pub fn input_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         match e.keystroke.key.as_str() {
-            "escape" => self.close(cx),
+            "escape" => self.dismiss(window, cx),
             "enter" => self.open_selected(window, cx),
             "up" => self.move_selection(-1, cx),
             "down" => self.move_selection(1, cx),

@@ -72,6 +72,14 @@ pub const CATALOG: &[Shortcut] = &[
         "ctrl-shift-o",
         None
     ),
+    s!(QuickOpen, "Go to file", "View", "ctrl-p", None),
+    s!(
+        CommandPalette,
+        "Command palette",
+        "View",
+        "ctrl-shift-p",
+        None
+    ),
     s!(
         TogglePreview,
         "Toggle Markdown preview",

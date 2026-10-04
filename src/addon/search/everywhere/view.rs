@@ -205,7 +205,9 @@ impl Render for EverywhereView {
                     .bg(chrome::tint(theme.bg, 0.55))
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(|this, _: &MouseDownEvent, _, cx| this.close(cx)),
+                        cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                            this.dismiss(window, cx)
+                        }),
                     ),
             )
             .child(panel)
