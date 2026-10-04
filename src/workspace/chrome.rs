@@ -199,9 +199,9 @@ impl Workspace {
                     .when(branch_icon, |d| {
                         d.child(
                             gpui::svg()
-                                .path("icons/rail-changes.svg")
-                                .w(px(13.))
-                                .h(px(13.))
+                                .path("icons/status-branch.svg")
+                                .w(px(14.))
+                                .h(px(14.))
                                 .flex_none()
                                 .mr(px(5.))
                                 .text_color(t.ink),
