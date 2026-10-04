@@ -95,6 +95,11 @@ impl EditorView {
 
     pub(super) fn find_type(&mut self, ch: &str, cx: &mut Context<Self>) {
         if let Some(f) = self.find.as_mut() {
+            if f.replace_open && f.in_replace {
+                f.replace.push_str(ch);
+                cx.notify();
+                return;
+            }
             f.query.text.push_str(ch);
         }
         self.find_recompute();
@@ -103,6 +108,11 @@ impl EditorView {
 
     pub(super) fn find_backspace(&mut self, cx: &mut Context<Self>) {
         if let Some(f) = self.find.as_mut() {
+            if f.replace_open && f.in_replace {
+                f.replace.pop();
+                cx.notify();
+                return;
+            }
             f.query.text.pop();
         }
         self.find_recompute();
@@ -148,20 +158,32 @@ impl EditorView {
             Status::NoResults => ("No results".to_string(), t.mute),
             Status::BadRegex => ("Invalid regex".to_string(), t.del),
         };
+        let replacing = f.replace_open && f.in_replace;
         let field = div()
+            .id("find-field")
             .w(px(FIELD_W))
             .flex_none()
             .px(px(8.))
             .py(px(3.))
             .rounded(px(4.))
             .border_1()
-            .border_color(t.acc)
+            .border_color(if replacing { t.line } else { t.acc })
             .bg(t.bg)
             .font_family(MONO)
             .text_size(px(12.))
             .text_color(t.ink)
             .whitespace_nowrap()
             .overflow_hidden()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                    cx.stop_propagation();
+                    if let Some(f) = this.find.as_mut() {
+                        f.in_replace = false;
+                    }
+                    cx.notify();
+                }),
+            )
             .child(SharedString::from(f.query.text.clone()));
         let count = div()
             .w(px(48.))
@@ -172,9 +194,6 @@ impl EditorView {
             .child(SharedString::from(label));
         let mut bar = div()
             .id("find-bar")
-            .absolute()
-            .right(px(28.))
-            .top(px(8.))
             .flex()
             .items_center()
             .gap(px(6.))
@@ -231,6 +250,107 @@ impl EditorView {
                     this.find_close(cx)
                 }),
             ));
-        Some(bar.into_any_element())
+        let replace = f.replace_open.then(|| self.replace_panel(t, cx));
+        Some(
+            div()
+                .id("find-wrap")
+                .absolute()
+                .right(px(28.))
+                .top(px(8.))
+                .flex()
+                .flex_col()
+                .items_end()
+                .gap(px(4.))
+                .child(bar)
+                .children(replace)
+                .into_any_element(),
+        )
+    }
+
+    /// The row under the find bar: the replacement text, Replace and Replace all.
+    fn replace_panel(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let (text, active) = self
+            .find
+            .as_ref()
+            .map(|f| (f.replace.clone(), f.in_replace))
+            .unwrap_or_default();
+        let button = |id: &'static str, label: &'static str| {
+            div()
+                .id(id)
+                .px(px(8.))
+                .h(px(22.))
+                .flex()
+                .items_center()
+                .rounded(px(4.))
+                .text_size(px(12.))
+                .cursor_pointer()
+                .text_color(t.mute)
+                .hover(|d| d.text_color(t.ink).bg(t.hov))
+                .child(label)
+        };
+        div()
+            .id("replace-bar")
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .pl(px(12.))
+            .pr(px(6.))
+            .py(px(5.))
+            .rounded(px(8.))
+            .bg(t.side)
+            .border_1()
+            .border_color(t.line)
+            .shadow(vec![BoxShadow {
+                color: hsla(0., 0., 0., 0.5),
+                offset: point(px(0.), px(6.)),
+                blur_radius: px(20.),
+                spread_radius: px(0.),
+            }])
+            .occlude()
+            .font_family("Segoe UI")
+            .text_size(px(13.))
+            .child(
+                div()
+                    .id("replace-field")
+                    .w(px(FIELD_W))
+                    .flex_none()
+                    .px(px(8.))
+                    .py(px(3.))
+                    .rounded(px(4.))
+                    .border_1()
+                    .border_color(if active { t.acc } else { t.line })
+                    .bg(t.bg)
+                    .font_family(MONO)
+                    .text_size(px(12.))
+                    .text_color(t.ink)
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                            cx.stop_propagation();
+                            if let Some(f) = this.find.as_mut() {
+                                f.in_replace = true;
+                            }
+                            cx.notify();
+                        }),
+                    )
+                    .child(SharedString::from(text)),
+            )
+            .child(button("replace-one", "Replace").on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.replace_current(cx)
+                }),
+            ))
+            .child(button("replace-all", "All").on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.replace_all(cx)
+                }),
+            ))
+            .into_any_element()
     }
 }

@@ -62,6 +62,96 @@ pub const CATALOG: &[Shortcut] = &[
     s!(Paste, "Paste", "Edit", "ctrl-v", EDITOR),
     s!(SelectAll, "Select all", "Edit", "ctrl-a", EDITOR),
     s!(Find, "Find in file", "Edit", "ctrl-f", EDITOR),
+    s!(ToggleComment, "Toggle comment", "Edit", "ctrl-/", EDITOR),
+    s!(Replace, "Replace in file", "Edit", "ctrl-h", EDITOR),
+    s!(GoToLine, "Go to line", "Edit", "ctrl-g", EDITOR),
+    s!(DeleteLine, "Delete line", "Edit", "ctrl-shift-k", EDITOR),
+    s!(
+        DuplicateLineDown,
+        "Copy line down",
+        "Edit",
+        "shift-alt-down",
+        EDITOR
+    ),
+    s!(
+        DuplicateLineUp,
+        "Copy line up",
+        "Edit",
+        "shift-alt-up",
+        EDITOR
+    ),
+    s!(MoveLineUp, "Move line up", "Edit", "alt-up", EDITOR),
+    s!(MoveLineDown, "Move line down", "Edit", "alt-down", EDITOR),
+    s!(IndentLines, "Indent lines", "Edit", "ctrl-]", EDITOR),
+    s!(
+        Outdent,
+        "Outdent lines",
+        "Edit",
+        "ctrl-[",
+        "shift-tab",
+        EDITOR
+    ),
+    s!(
+        InsertLineBelow,
+        "Insert line below",
+        "Edit",
+        "ctrl-enter",
+        EDITOR
+    ),
+    s!(
+        InsertLineAbove,
+        "Insert line above",
+        "Edit",
+        "ctrl-shift-enter",
+        EDITOR
+    ),
+    s!(SelectLine, "Select line", "Edit", "ctrl-l", EDITOR),
+    s!(WordLeft, "Move word left", "Editor", "ctrl-left", EDITOR),
+    s!(WordRight, "Move word right", "Editor", "ctrl-right", EDITOR),
+    s!(
+        SelectWordLeft,
+        "Select word left",
+        "Editor",
+        "ctrl-shift-left",
+        EDITOR
+    ),
+    s!(
+        SelectWordRight,
+        "Select word right",
+        "Editor",
+        "ctrl-shift-right",
+        EDITOR
+    ),
+    s!(
+        DeleteWordLeft,
+        "Delete word left",
+        "Editor",
+        "ctrl-backspace",
+        EDITOR
+    ),
+    s!(
+        DeleteWordRight,
+        "Delete word right",
+        "Editor",
+        "ctrl-delete",
+        EDITOR
+    ),
+    s!(DocStart, "Go to file start", "Editor", "ctrl-home", EDITOR),
+    s!(DocEnd, "Go to file end", "Editor", "ctrl-end", EDITOR),
+    s!(
+        SelectDocStart,
+        "Select to file start",
+        "Editor",
+        "ctrl-shift-home",
+        EDITOR
+    ),
+    s!(
+        SelectDocEnd,
+        "Select to file end",
+        "Editor",
+        "ctrl-shift-end",
+        EDITOR
+    ),
     // View
     s!(ToggleSidebar, "Toggle sidebar", "View", "ctrl-b", None),
     s!(SplitRight, "Split right", "View", "ctrl-\\", None),

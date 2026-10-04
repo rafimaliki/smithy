@@ -125,6 +125,30 @@ impl Lang {
             .and_then(Lang::from_extension)
     }
 
+    /// How Ctrl+/ comments a line: the prefix, and the closing token for languages
+    /// that only have block comments. `None` for JSON, which has no comments.
+    pub fn comment_tokens(self) -> Option<(&'static str, Option<&'static str>)> {
+        Some(match self {
+            Lang::C
+            | Lang::CSharp
+            | Lang::Cpp
+            | Lang::Dart
+            | Lang::Go
+            | Lang::Java
+            | Lang::JavaScript
+            | Lang::JavaScriptReact
+            | Lang::Kotlin
+            | Lang::Rust
+            | Lang::TypeScript
+            | Lang::TypeScriptReact => ("//", None),
+            Lang::Python | Lang::PowerShell | Lang::Shell | Lang::Toml | Lang::Yaml => ("#", None),
+            Lang::Sql => ("--", None),
+            Lang::Css => ("/*", Some("*/")),
+            Lang::Html | Lang::Markdown | Lang::Svg | Lang::Xml => ("<!--", Some("-->")),
+            Lang::Json => return None,
+        })
+    }
+
     /// Shown in the status bar and the picker's header.
     pub fn display(lang: Option<Lang>) -> &'static str {
         lang.map(Lang::name).unwrap_or("Plain Text")
