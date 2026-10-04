@@ -1,11 +1,10 @@
 //! The right end of the header row, the same row as the file tabs. The native title
 //! bar is hidden (`appears_transparent` in `app.rs`), so the window is moved from the
 //! empty part of this row and closed, minimized and maximized from the buttons here.
-//! After the tabs: a drag area, a divider, the title actions, a divider, the buttons.
+//! After the tabs: a drag area, then the buttons.
 use super::Workspace;
-use crate::actions::{OpenFolder, ToggleSidebar};
 use crate::theme::Theme;
-use gpui::{div, prelude::*, px, rgb, Context, Div, IntoElement, Stateful, WindowControlArea};
+use gpui::{div, prelude::*, px, rgb, Div, IntoElement, WindowControlArea};
 
 const BUTTON_W: f32 = 46.0;
 
@@ -16,10 +15,6 @@ pub(super) fn drag_area() -> Div {
         .min_w_0()
         .h_full()
         .window_control_area(WindowControlArea::Drag)
-}
-
-fn divider(t: &Theme) -> Div {
-    div().w(px(1.)).h(px(20.)).mx(px(6.)).flex_none().bg(t.line)
 }
 
 /// Minimize, maximize and close; Windows treats them as caption controls.
@@ -59,59 +54,14 @@ pub(super) fn window_controls(t: &Theme) -> impl IntoElement {
         ))
 }
 
-/// One icon button of the title actions.
-fn action_button(id: &'static str, icon: &'static str, t: &Theme) -> Stateful<Div> {
-    div()
-        .id(id)
-        .group(id)
-        .w(px(28.))
-        .h(px(28.))
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(4.))
-        .cursor_pointer()
-        .hover(|d| d.bg(t.hov))
-        .child(
-            gpui::svg()
-                .path(icon)
-                .w(px(18.))
-                .h(px(18.))
-                .flex_none()
-                .text_color(t.mute)
-                .group_hover(id, |s| s.text_color(t.ink)),
-        )
-}
-
 impl Workspace {
-    /// Title actions, then the window buttons: the tail of the header row.
-    pub(super) fn header_tail(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
-        // ponytail: two core actions; add-ons that want a title action need a hook.
-        let actions = div()
-            .flex()
-            .items_center()
-            .gap(px(2.))
-            .child(
-                action_button("act-sidebar", "icons/title-sidebar.svg", t).on_click(cx.listener(
-                    |_, _, window, cx| window.dispatch_action(Box::new(ToggleSidebar), cx),
-                )),
-            )
-            .child(
-                action_button("act-open", "icons/rail-files.svg", t).on_click(
-                    cx.listener(|_, _, window, cx| {
-                        window.dispatch_action(Box::new(OpenFolder), cx)
-                    }),
-                ),
-            );
+    /// The window buttons: the tail of the header row.
+    pub(super) fn header_tail(&self, t: &Theme) -> impl IntoElement {
         div()
             .flex()
             .flex_none()
             .items_center()
             .h_full()
-            .child(divider(t))
-            .child(actions)
-            .child(divider(t))
             .child(window_controls(t))
     }
 
