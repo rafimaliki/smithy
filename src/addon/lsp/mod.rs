@@ -86,7 +86,7 @@ impl AddonInstance for Instance {
     fn toggle_language_server(&self, id: &str, cx: &mut App) {
         self.manager.lock().unwrap().toggle(id);
         if let Some(workspace) = self.workspace.clone() {
-            workspace.update(cx, |_, cx| cx.notify()).ok();
+            crate::addon::notify_workspace(&workspace, cx);
         }
     }
 }
