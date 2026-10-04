@@ -159,6 +159,34 @@ impl EditorView {
                 }
                 body =
                     body.child(this.text_row(&text, line, r.start..r.end, &theme, &line_matches));
+                if let Some(h) = this.highlighter.as_ref().filter(|_| this.errors_on) {
+                    for e in h.errors_on_line(line) {
+                        let (from, to) =
+                            ((e.start as usize).max(r.start), (e.end as usize).min(r.end));
+                        // A missing token at the end of the line sits one column past the text.
+                        let to = if to <= from && last && from >= r.end {
+                            from + 1
+                        } else {
+                            to
+                        };
+                        if to <= from {
+                            continue;
+                        }
+                        let v0 = visual_col(&text, from) - vbase;
+                        let v1 = visual_col(&text, to) - vbase;
+                        body = body.child(
+                            div()
+                                .absolute()
+                                .bottom(px(1.))
+                                .h(px(2.))
+                                .left(px(v0 as f32 * char_w - scroll_x))
+                                .w(px((v1 - v0).max(1) as f32 * char_w))
+                                .rounded(px(1.))
+                                .bg(theme.del)
+                                .opacity(0.9),
+                        );
+                    }
+                }
                 if !blame_column && last && line == cursor_line {
                     if let Some(Some(blame)) = decorations.blame.get(line) {
                         body = body.child(inline_blame(blame, &theme));

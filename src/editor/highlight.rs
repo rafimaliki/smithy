@@ -6,7 +6,7 @@ use super::lang::Lang;
 use crate::theme::Theme;
 use gpui::Rgba;
 use std::ops::Range;
-use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator, Tree};
+use tree_sitter::{Node, Parser, Query, QueryCursor, StreamingIterator, Tree};
 
 /// The five colors the editor knows. Everything else draws in the text color.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -38,6 +38,18 @@ pub struct Span {
     pub kind: Kind,
 }
 
+/// A syntax error on one line, in char columns: tree-sitter's ERROR node, or a MISSING
+/// token (drawn one column wide).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ErrorSpan {
+    pub line: u32,
+    pub start: u32,
+    pub end: u32,
+}
+
+/// More than this and the file is mostly broken; the rest are not collected.
+const MAX_ERRORS: usize = 500;
+
 pub struct Highlighter {
     parser: Parser,
     query: Query,
@@ -46,6 +58,9 @@ pub struct Highlighter {
     cursor: QueryCursor,
     tree: Option<Tree>,
     spans: Vec<Span>,
+    /// Filled only while the Error highlighting add-on is on.
+    collect_errors: bool,
+    errors: Vec<ErrorSpan>,
 }
 
 impl Highlighter {
@@ -69,13 +84,39 @@ impl Highlighter {
             cursor: QueryCursor::new(),
             tree: None,
             spans: Vec::new(),
+            collect_errors: false,
+            errors: Vec::new(),
         })
     }
 
-    /// Re-parse and re-collect the spans. The old tree makes the parse incremental.
+    /// Turn error collection on or off; the next `update` fills or clears the list.
+    pub fn set_collect_errors(&mut self, on: bool) {
+        self.collect_errors = on;
+        if !on {
+            self.errors.clear();
+        }
+    }
+
+    pub fn errors(&self) -> &[ErrorSpan] {
+        &self.errors
+    }
+
+    /// The errors that start on `line`.
+    pub fn errors_on_line(&self, line: usize) -> &[ErrorSpan] {
+        let line = line as u32;
+        let lo = self.errors.partition_point(|e| e.line < line);
+        let hi = self.errors.partition_point(|e| e.line <= line);
+        &self.errors[lo..hi]
+    }
+
+    /// Re-parse and re-collect the spans.
+    // ponytail: a full reparse per edit. Reusing the old tree is only valid after
+    // `Tree::edit` tells it what changed, which the buffer does not report; without
+    // that it reuses stale nodes (wrong colors, phantom errors). Upgrade: have
+    // `Buffer::replace` return an `InputEdit` and pass the edited old tree.
     pub fn update(&mut self, text: &str) {
         let bytes = text.as_bytes();
-        let Some(tree) = self.parser.parse(bytes, self.tree.as_ref()) else {
+        let Some(tree) = self.parser.parse(bytes, None) else {
             self.spans.clear();
             return;
         };
@@ -119,6 +160,11 @@ impl Highlighter {
         }
         self.spans
             .sort_unstable_by_key(|s| (s.line, s.start, std::cmp::Reverse(s.end)));
+        self.errors = if self.collect_errors {
+            collect_errors(tree.root_node(), &lines)
+        } else {
+            Vec::new()
+        };
         self.tree = Some(tree);
     }
 
@@ -129,6 +175,48 @@ impl Highlighter {
         let hi = self.spans.partition_point(|s| s.line <= line);
         &self.spans[lo..hi]
     }
+}
+
+/// ERROR and MISSING nodes of a tree, outermost first, in line order.
+fn collect_errors(root: Node, lines: &[&str]) -> Vec<ErrorSpan> {
+    let mut out = Vec::new();
+    if !root.has_error() {
+        return out;
+    }
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if out.len() >= MAX_ERRORS {
+            break;
+        }
+        if node.is_error() || node.is_missing() {
+            let (start, end) = (node.start_position(), node.end_position());
+            let Some(line) = lines.get(start.row) else {
+                continue;
+            };
+            let len = line.chars().count();
+            let from = char_col(line, start.column).min(len);
+            let to = if end.row == start.row {
+                char_col(line, end.column).min(len)
+            } else {
+                len
+            };
+            // A missing token is zero wide: underline the column it belongs at.
+            let to = to.max(from + 1).min(len.max(from + 1));
+            out.push(ErrorSpan {
+                line: start.row as u32,
+                start: from as u32,
+                end: to as u32,
+            });
+            continue;
+        }
+        if node.has_error() {
+            let mut cursor = node.walk();
+            let children: Vec<Node> = node.children(&mut cursor).collect();
+            stack.extend(children.into_iter().rev());
+        }
+    }
+    out.sort_unstable_by_key(|e| (e.line, e.start));
+    out
 }
 
 /// Byte column (tree-sitter's counting) to char column, clamped to the line.
@@ -290,5 +378,19 @@ mod tests {
         assert!(kinds.contains(&Kind::Comment), "no comment: {kinds:?}");
         assert!(kinds.contains(&Kind::Str), "no string: {kinds:?}");
         assert!(kinds.contains(&Kind::Func), "no function: {kinds:?}");
+    }
+
+    #[test]
+    fn syntax_errors_are_collected_only_when_asked() {
+        let broken = "fn main() {\n    let x = ;\n}\n";
+        let mut h = Highlighter::new(Lang::Rust).unwrap();
+        h.update(broken);
+        assert!(h.errors().is_empty());
+        h.set_collect_errors(true);
+        h.update(broken);
+        assert!(!h.errors().is_empty());
+        assert!(h.errors().iter().all(|e| e.line == 1));
+        h.update("fn main() {\n    let x = 1;\n}\n");
+        assert!(h.errors().is_empty());
     }
 }

@@ -3,6 +3,7 @@
 //! blame live in `view/gutter.rs`, and the Ctrl+F bar in `view/find_bar.rs`.
 //! ponytail: no IME; upgrade: EntityInputHandler for IME, per-line shaped text.
 mod blink;
+mod errors;
 mod find_bar;
 mod gutter;
 mod gutter_menu;
@@ -68,6 +69,8 @@ pub struct EditorView {
     find_rev: u64,
     /// Caret blink phase; restarts on every move.
     blink: Blink,
+    /// The Error highlighting add-on is on, as of the last render.
+    errors_on: bool,
     /// Where the line-number menu is open, in window coordinates.
     gutter_menu: Option<gpui::Point<gpui::Pixels>>,
     /// Alt+Z or the status-bar item flips this; last choice is in `Settings`.
@@ -143,6 +146,7 @@ impl EditorView {
             find_rev: u64::MAX,
             blink: Blink::new(),
             gutter_menu: None,
+            errors_on: false,
             wrap,
             wrap_index: None,
             wrap_key: (u64::MAX, 0),
@@ -414,6 +418,7 @@ impl Render for EditorView {
             self.char_w = f32::from(adv.width);
         }
         let entity = cx.entity();
+        self.sync_error_highlight(cx);
         self.ensure_wrap(self.text_width());
         let count = self.visual_row_count();
         div()
@@ -446,6 +451,8 @@ impl Render for EditorView {
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::on_find))
+            .on_action(cx.listener(Self::next_error))
+            .on_action(cx.listener(Self::prev_error))
             .on_action(cx.listener(Self::goto_definition))
             .on_action(cx.listener(Self::find_references))
             .on_action(cx.listener(Self::nav_back))
