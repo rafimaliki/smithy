@@ -187,12 +187,26 @@ impl Workspace {
             let Some(status) = inst.status(cx) else {
                 continue;
             };
+            // The branch icon goes with a real branch (or PR ref); "No repository" has
+            // no detail and no icon.
+            let branch_icon = !status.detail.is_empty();
             bar = bar.child(
                 div()
                     .mr(px(18.))
                     .flex()
-                    .gap(px(5.))
+                    .items_center()
                     .text_color(t.ink)
+                    .when(branch_icon, |d| {
+                        d.child(
+                            gpui::svg()
+                                .path("icons/status-branch.svg")
+                                .w(px(14.))
+                                .h(px(14.))
+                                .flex_none()
+                                .mr(px(5.))
+                                .text_color(t.ink),
+                        )
+                    })
                     .child(SharedString::from(status.branch)),
             );
             if !status.detail.is_empty() {
