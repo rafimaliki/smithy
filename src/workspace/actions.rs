@@ -1,8 +1,8 @@
 //! Action handlers: one method per workspace action, wired in `render.rs`.
 use super::Workspace;
 use crate::actions::{
-    CloseTab, NextTab, OpenFolder, PrevTab, Quit, ReopenTab, Save, SearchEverywhere, SplitRight,
-    ToggleSidebar, ToggleTerminal,
+    CloseTab, CommandPalette, NextTab, OpenFolder, PrevTab, QuickOpen, Quit, ReopenTab, Save,
+    SearchEverywhere, SplitRight, ToggleSidebar, ToggleTerminal,
 };
 use crate::editor::view::EditorEvent;
 use gpui::{Context, Window};
@@ -105,6 +105,32 @@ impl Workspace {
     ) {
         for (_, inst) in self.registry.running() {
             inst.toggle_search_everywhere(window, cx);
+        }
+        cx.notify();
+    }
+
+    /// Ctrl+P: Search everywhere on the Files tab.
+    pub(crate) fn on_quick_open(
+        &mut self,
+        _: &QuickOpen,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for (_, inst) in self.registry.running() {
+            inst.quick_open(window, cx);
+        }
+        cx.notify();
+    }
+
+    /// Ctrl+Shift+P: the command palette.
+    pub(crate) fn on_command_palette(
+        &mut self,
+        _: &CommandPalette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for (_, inst) in self.registry.running() {
+            inst.toggle_command_palette(window, cx);
         }
         cx.notify();
     }

@@ -161,6 +161,10 @@ pub trait AddonInstance {
     }
     /// Ctrl+Shift+O reached the workspace: open or close the add-on's overlay.
     fn toggle_search_everywhere(&self, _window: &mut Window, _cx: &mut App) {}
+    /// Ctrl+P reached the workspace: open Search everywhere on the Files tab.
+    fn quick_open(&self, _window: &mut Window, _cx: &mut App) {}
+    /// Ctrl+Shift+P reached the workspace: open or close the command palette.
+    fn toggle_command_palette(&self, _window: &mut Window, _cx: &mut App) {}
     /// The add-on's view for the bottom panel, or `None` while it has none open.
     /// The core draws it under the editor, above the status bar.
     fn bottom_panel(&self, _cx: &App) -> Option<AnyView> {

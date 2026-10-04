@@ -48,6 +48,10 @@ actions!(
         Quit,
         // Handled by the Search add-on; does nothing while it is off.
         SearchEverywhere,
+        // Also handled by the Search add-on: Ctrl+P opens it on the Files tab, and
+        // Ctrl+Shift+P opens the command palette.
+        QuickOpen,
+        CommandPalette,
         // Handled by the Terminal add-on; does nothing while it is off.
         ToggleTerminal,
         // Handled by the add-on that owns the tab's document view.

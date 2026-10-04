@@ -218,6 +218,8 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_reopen_tab))
             .on_action(cx.listener(Self::on_split_right))
             .on_action(cx.listener(Self::on_search_everywhere))
+            .on_action(cx.listener(Self::on_quick_open))
+            .on_action(cx.listener(Self::on_command_palette))
             .on_action(cx.listener(Self::on_toggle_terminal))
             .on_action(cx.listener(Self::on_save))
             .on_action(cx.listener(Self::on_quit))
