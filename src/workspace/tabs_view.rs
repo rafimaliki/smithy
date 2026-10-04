@@ -6,11 +6,20 @@ use super::Workspace;
 use crate::theme::Theme;
 use gpui::{
     div, prelude::*, px, AnyElement, Context, MouseButton, MouseDownEvent, Render, Rgba,
-    SharedString, Window,
+    ScrollHandle, SharedString, Window,
 };
+use std::cell::Cell;
 use std::path::PathBuf;
 
 const PIN: &str = "icons/pin.svg";
+
+/// Horizontal scroll of each group's tab strip, and what it was last scrolled to,
+/// so a tab that becomes active (or is added) is brought into view once.
+#[derive(Default)]
+pub(super) struct TabScroll {
+    handles: [ScrollHandle; 2],
+    seen: Cell<[Option<(usize, usize)>; 2]>,
+}
 
 /// What a dragged tab carries: its path and the group it came from, so a drop on
 /// the other group can move it across.
@@ -72,9 +81,21 @@ impl Workspace {
             .bg(t.side)
             .border_b_1()
             .border_color(t.line);
+        // The tabs sit in their own strip that clips and scrolls, so many tabs never
+        // push the drag area, the title actions or the window buttons out of the row.
+        let handle = self.tab_scroll.handles[usize::from(right)].clone();
+        let mut tabs = div()
+            .id(SharedString::from(format!("tabs-{right}")))
+            .flex()
+            .flex_initial()
+            .min_w_0()
+            .h_full()
+            .overflow_x_scroll()
+            .track_scroll(&handle);
+        let simple_icons = cx.global::<crate::settings::Settings>().file_icons != "brand";
         let pinned_count = set.tabs.iter().filter(|t| t.pinned).count();
         for (i, tab) in set.tabs.iter().enumerate() {
-            let active = i == set.active && !self.show_settings;
+            let active = i == set.active;
             let dirty = self.is_dirty_in(right, i, cx);
             let pinned = tab.pinned;
             let name = Self::tab_label(set, i);
@@ -122,6 +143,7 @@ impl Workspace {
                 .id((SharedString::from(format!("tab-{right}")), i))
                 .group(group)
                 .flex()
+                .flex_none()
                 .items_center()
                 .h_full()
                 .gap(px(if pinned { 6. } else { 8. }))
@@ -154,6 +176,15 @@ impl Workspace {
                         cx.notify();
                     }),
                 );
+            // The file's icon, brand or simple as in the tree. An add-on tab has no
+            // file on disk, so its icon follows its label.
+            let icon_path = if tab.path.starts_with("<addon>") {
+                PathBuf::from(name.to_string())
+            } else {
+                tab.path.clone()
+            };
+            let icon = crate::tree::view::icon(t, simple_icons, &icon_path, false);
+            item = item.child(icon);
             if pinned {
                 item = item.child(pin_mark(t)).child(name.clone());
             } else {
@@ -180,10 +211,10 @@ impl Workspace {
                     },
                 );
             }
-            bar = bar.child(item);
+            tabs = tabs.child(item);
             // A hairline between the pinned block and the rest.
             if pinned && i + 1 == pinned_count && pinned_count < set.tabs.len() {
-                bar = bar.child(
+                tabs = tabs.child(
                     div()
                         .w(px(1.))
                         .h(px(20.))
@@ -193,6 +224,24 @@ impl Workspace {
                         .bg(t.line),
                 );
             }
+        }
+        // The empty part of the row moves the window; the window buttons belong to the
+        // group at the right edge only.
+        // Bring the active tab into view when it changes or the count does.
+        let key = (set.active, set.tabs.len());
+        let mut seen = self.tab_scroll.seen.get();
+        if !self.show_settings && seen[usize::from(right)] != Some(key) && !set.tabs.is_empty() {
+            seen[usize::from(right)] = Some(key);
+            self.tab_scroll.seen.set(seen);
+            // The hairline after the pinned block is a child of its own.
+            let hairline =
+                pinned_count > 0 && pinned_count < set.tabs.len() && set.active >= pinned_count;
+            handle.scroll_to_item(set.active + usize::from(hairline));
+        }
+        bar = bar.child(tabs);
+        bar = bar.child(super::header::drag_area());
+        if !self.is_split() || right {
+            bar = bar.child(self.header_tail(t, cx));
         }
         // Accept a tab dragged from the other group; only relevant while split.
         if self.is_split() {

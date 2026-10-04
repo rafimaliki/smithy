@@ -40,12 +40,25 @@ impl Workspace {
             .px(px(12.))
             .text_size(px(11.))
             .text_color(t.mute)
-            .child(div().w(px(160.)).child("Language".to_uppercase()))
-            .child(div().w(px(150.)).child("Files".to_uppercase()))
-            .child(div().flex_1().child("Language server".to_uppercase()))
+            .child(
+                div()
+                    .w(px(160.))
+                    .flex_none()
+                    .child("Language".to_uppercase()),
+            )
+            .child(div().w(px(150.)).flex_none().child("Files".to_uppercase()))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .child("Language server".to_uppercase()),
+            )
             .child(
                 div()
                     .w(px(100.))
+                    .flex_none()
                     .text_right()
                     .child("Status".to_uppercase()),
             );
@@ -64,12 +77,14 @@ impl Workspace {
                 .child(
                     div()
                         .w(px(160.))
+                        .flex_none()
                         .text_color(t.ink)
                         .child(SharedString::from(*name)),
                 )
                 .child(
                     div()
                         .w(px(150.))
+                        .flex_none()
                         .font_family("Cascadia Mono")
                         .text_size(px(12.))
                         .text_color(t.mute)
@@ -78,6 +93,9 @@ impl Workspace {
                 .child(
                     div()
                         .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
                         .font_family("Cascadia Mono")
                         .text_size(px(12.))
                         .text_color(t.mute)
@@ -85,7 +103,7 @@ impl Workspace {
                             server.map(|s| s.server).unwrap_or_default(),
                         )),
                 );
-            let status = div().w(px(100.)).flex().justify_end();
+            let status = div().w(px(100.)).flex_none().flex().justify_end();
             row = match server {
                 Some(server) => {
                     let id = server.id;
@@ -111,7 +129,14 @@ impl Workspace {
                         "Syntax highlighting for {count} languages, plus optional language servers."
                     ))),
             )
-            .child(div().w(px(860.)).mt(px(22.)).child(header).child(rows))
+            .child(
+                div()
+                    .w_full()
+                    .max_w(px(860.))
+                    .mt(px(22.))
+                    .child(header)
+                    .child(rows),
+            )
             .child(
                 div()
                     .max_w(px(860.))

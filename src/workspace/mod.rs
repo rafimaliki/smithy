@@ -4,6 +4,7 @@ mod actions;
 mod banner;
 mod chrome;
 mod dialog;
+mod header;
 mod lang_menu;
 mod launch;
 pub(crate) mod menu;
@@ -20,7 +21,6 @@ mod tab_prompt;
 pub mod tab_set;
 mod tabs;
 mod tabs_view;
-mod title_bar;
 pub(crate) mod watch;
 
 use crate::addon::{AddonContext, Registry};
@@ -83,8 +83,7 @@ pub struct Workspace {
     /// Raw sidebar width while the divider is being dragged.
     pub(crate) drag: Option<f32>,
     pub(crate) show_settings: bool,
-    /// The custom title bar is showing (pointer near the top edge).
-    pub(crate) title_bar: bool,
+    tab_scroll: tabs_view::TabScroll,
     /// The status-bar language picker is open.
     pub(crate) lang_menu: bool,
     /// Which settings section the pane shows.
@@ -125,8 +124,15 @@ impl Workspace {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let handle = cx.entity();
         let capture_sub = cx.intercept_keystrokes(move |e, _window, cx| {
-            let active = handle.read_with(cx, |this, _| this.capture.is_some());
-            if !active {
+            let (capturing, settings_open) =
+                handle.read_with(cx, |this, _| (this.capture.is_some(), this.show_settings));
+            if !capturing {
+                // Esc closes the Settings modal.
+                if settings_open && e.keystroke.key == "escape" && !e.keystroke.modifiers.modified()
+                {
+                    handle.update(cx, |this, cx| this.close_settings(cx));
+                    cx.stop_propagation();
+                }
                 return;
             }
             let consumed = handle.update(cx, |this, cx| this.on_captured_key(&e.keystroke, cx));
@@ -147,7 +153,7 @@ impl Workspace {
             sidebar_visible: true,
             drag: None,
             show_settings: false,
-            title_bar: false,
+            tab_scroll: Default::default(),
             lang_menu: false,
             settings_section: SettingsSection::Appearance,
             github_settings: None,

@@ -88,9 +88,6 @@ impl Workspace {
     }
 
     fn content(&self, right: bool, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        if self.show_settings {
-            return self.settings_view(t, cx).into_any_element();
-        }
         match self
             .group(right)
             .active_tab()
@@ -166,7 +163,7 @@ impl Workspace {
     /// The editor area: one column, or two side by side while split, with the
     /// add-on bottom panel under all of it.
     fn editor_area(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
-        let columns = if self.show_settings || !self.is_split() {
+        let columns = if !self.is_split() {
             div()
                 .flex_1()
                 .min_h_0()
@@ -229,15 +226,17 @@ impl Render for Workspace {
             .bg(t.bg)
             .text_color(t.ink)
             .font_family("Segoe UI")
-            .text_size(px(13.))
-            .on_mouse_move(
-                cx.listener(|this, e: &MouseMoveEvent, _, cx| this.track_title_bar(e, cx)),
-            );
+            .text_size(px(13.));
 
         if self.folder.is_none() {
-            return root
-                .child(self.launch(&t, cx))
-                .children(self.title_bar(&t, cx));
+            return root.child(
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .child(self.launch_header(&t))
+                    .child(div().flex_1().min_h_0().child(self.launch(&t, cx))),
+            );
         }
 
         let saved_width = cx.global::<crate::settings::Settings>().sidebar_width;
@@ -276,7 +275,7 @@ impl Render for Workspace {
                         .min_h_0()
                         .flex()
                         .child(self.rail(&t, cx))
-                        .when(self.sidebar_visible && !self.show_settings, |d| {
+                        .when(self.sidebar_visible, |d| {
                             d.child(self.sidebar_panel(&t, width, collapsing))
                                 .child(self.divider(&t, cx))
                         })
@@ -292,10 +291,10 @@ impl Render for Workspace {
                 )
                 .child(self.status_bar(&t, cx)),
         )
-        .children(self.title_bar(&t, cx))
         .children(self.lang_menu(&t, cx))
         .children(self.tab_menu(&t, cx))
         .children(self.addon_overlay(cx))
+        .children(self.settings_modal(&t, cx))
         .children(self.unsaved_prompt(&t, cx))
         .children(self.delete_dialog(&t, cx))
     }

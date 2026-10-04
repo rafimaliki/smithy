@@ -5,7 +5,9 @@ use super::{
     Workspace,
 };
 use crate::theme::{on_accent, Theme, THEMES};
-use gpui::{div, prelude::*, px, AnyElement, Context, SharedString, Stateful};
+use gpui::{
+    div, hsla, point, prelude::*, px, AnyElement, BoxShadow, Context, SharedString, Stateful,
+};
 
 /// Which settings section the pane shows.
 #[derive(Clone, Copy, PartialEq)]
@@ -66,10 +68,41 @@ impl Workspace {
         cx.notify();
     }
 
-    pub(super) fn settings_view(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .size_full()
+    pub(crate) fn close_settings(&mut self, cx: &mut Context<Self>) {
+        if self.show_settings {
+            self.show_settings = false;
+            self.capture = None;
+            cx.notify();
+        }
+    }
+
+    /// Settings as a modal over the workbench: a darkened overlay, the nav on the
+    /// left and the section on the right. The X, Esc or a click on the overlay
+    /// closes it. Board frames `settings-*`.
+    pub(super) fn settings_modal(&self, t: &Theme, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.show_settings {
+            return None;
+        }
+        let modal = div()
+            .relative()
+            .w_full()
+            .max_w(px(1360.))
+            .h_full()
+            .max_h(px(788.))
             .flex()
+            .overflow_hidden()
+            .rounded(px(12.))
+            .bg(t.bg)
+            .border_1()
+            .border_color(t.line)
+            .shadow(vec![BoxShadow {
+                color: hsla(0., 0., 0., 0.6),
+                offset: point(px(0.), px(24.)),
+                blur_radius: px(80.),
+                spread_radius: px(0.),
+            }])
+            .occlude()
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_settings(cx)))
             .child(self.settings_nav(t, cx))
             .child(
                 div()
@@ -78,14 +111,48 @@ impl Workspace {
                     .min_w_0()
                     .h_full()
                     .overflow_y_scroll()
-                    .p(px(36.))
+                    .px(px(40.))
+                    .py(px(32.))
                     .child(self.settings_section(t, cx)),
             )
+            .child(
+                div()
+                    .id("settings-close")
+                    .absolute()
+                    .top(px(12.))
+                    .right(px(14.))
+                    .size(px(28.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(6.))
+                    .cursor_pointer()
+                    .text_color(t.mute)
+                    .hover(|d| d.bg(t.hov).text_color(t.ink))
+                    .on_click(cx.listener(|this, _, _, cx| this.close_settings(cx)))
+                    .child("\u{2715}"),
+            );
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .occlude()
+                .bg(hsla(0., 0., 0., 0.55))
+                .flex()
+                .items_center()
+                .justify_center()
+                .px(px(40.))
+                .py(px(56.))
+                .child(modal)
+                .into_any_element(),
+        )
     }
 
     fn settings_nav(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
         let mut nav = div()
-            .w(px(200.))
+            .w(px(220.))
             .h_full()
             .flex_none()
             .flex()
@@ -146,7 +213,8 @@ impl Workspace {
     fn appearance_section(&self, t: &Theme, cx: &mut Context<Self>) -> AnyElement {
         // Four 200 px cards per row, as on the board.
         let mut themes = div()
-            .w(px(4. * 200. + 3. * 16.))
+            .w_full()
+            .max_w(px(4. * 200. + 3. * 16.))
             .flex()
             .flex_wrap()
             .gap(px(16.))

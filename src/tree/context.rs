@@ -24,6 +24,9 @@ impl TreeView {
         let is_dir = open_menu.is_dir;
         let at = open_menu.at;
         let can_paste = cx.global::<ops::Clipboard>().path.is_some();
+        // The opened folder itself (right-click on empty space): it can hold new
+        // entries and be pasted into, but not be copied, cut, renamed or deleted.
+        let is_root = path == self.tree.root;
 
         let mut rows: Vec<AnyElement> = Vec::new();
         if is_dir {
@@ -60,23 +63,25 @@ impl TreeView {
             rows.push(menu::separator(t).into_any_element());
         }
 
-        let (copy, cut) = (path.clone(), path.clone());
-        rows.push(
-            menu::item("m-copy", "Copy", Some("Ctrl+C"), false, true, t)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.menu = None;
-                    this.hold(copy.clone(), false, cx);
-                }))
-                .into_any_element(),
-        );
-        rows.push(
-            menu::item("m-cut", "Cut", Some("Ctrl+X"), false, true, t)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.menu = None;
-                    this.hold(cut.clone(), true, cx);
-                }))
-                .into_any_element(),
-        );
+        if !is_root {
+            let (copy, cut) = (path.clone(), path.clone());
+            rows.push(
+                menu::item("m-copy", "Copy", Some("Ctrl+C"), false, true, t)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.menu = None;
+                        this.hold(copy.clone(), false, cx);
+                    }))
+                    .into_any_element(),
+            );
+            rows.push(
+                menu::item("m-cut", "Cut", Some("Ctrl+X"), false, true, t)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.menu = None;
+                        this.hold(cut.clone(), true, cx);
+                    }))
+                    .into_any_element(),
+            );
+        }
         if is_dir {
             let paste = path.clone();
             rows.push(
@@ -108,34 +113,38 @@ impl TreeView {
             }))
             .into_any_element(),
         );
-        rows.push(
-            menu::item("m-copy-rel", "Copy relative path", None, false, true, t)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.menu = None;
-                    this.copy_path(copy_rel.clone(), true, cx);
-                }))
-                .into_any_element(),
-        );
+        // The root has no path relative to itself.
+        if !is_root {
+            rows.push(
+                menu::item("m-copy-rel", "Copy relative path", None, false, true, t)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.menu = None;
+                        this.copy_path(copy_rel.clone(), true, cx);
+                    }))
+                    .into_any_element(),
+            );
+        }
         rows.push(menu::separator(t).into_any_element());
 
-        let (rename, delete) = (path.clone(), path.clone());
-        rows.push(
-            menu::item("m-rename", "Rename…", Some("F2"), false, true, t)
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    this.menu = None;
-                    this.begin_rename(rename.clone(), false, window, cx);
-                }))
-                .into_any_element(),
-        );
-        rows.push(
-            menu::item("m-delete", "Delete", Some("Del"), true, true, t)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.request_delete(delete.clone(), cx);
-                }))
-                .into_any_element(),
-        );
-        rows.push(menu::separator(t).into_any_element());
-
+        if !is_root {
+            let (rename, delete) = (path.clone(), path.clone());
+            rows.push(
+                menu::item("m-rename", "Rename…", Some("F2"), false, true, t)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.menu = None;
+                        this.begin_rename(rename.clone(), false, window, cx);
+                    }))
+                    .into_any_element(),
+            );
+            rows.push(
+                menu::item("m-delete", "Delete", Some("Del"), true, true, t)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.request_delete(delete.clone(), cx);
+                    }))
+                    .into_any_element(),
+            );
+            rows.push(menu::separator(t).into_any_element());
+        }
         // Only when the Terminal add-on is on; its menus are hidden while it is off.
         if is_dir
             && cx
