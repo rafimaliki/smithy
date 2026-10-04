@@ -18,6 +18,10 @@
     {
       "id": "plan",
       "title": "Implementation plan"
+    },
+    {
+      "id": "components",
+      "title": "Components"
     }
   ]
 }
