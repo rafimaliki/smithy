@@ -11,6 +11,12 @@
       "description": "",
       "file": "library/window-controls.html",
       "props": []
+    },
+    "editor-scrollbar": {
+      "title": "Editor scrollbar",
+      "description": "",
+      "file": "library/editor-scrollbar.html",
+      "props": []
     }
   }
 }

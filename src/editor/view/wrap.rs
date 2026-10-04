@@ -107,6 +107,8 @@ impl EditorView {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Any wheel turn moves the list, so the scrollbar thumb has to follow.
+        cx.notify();
         if self.wrap {
             return;
         }

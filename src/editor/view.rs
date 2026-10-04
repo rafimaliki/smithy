@@ -8,6 +8,7 @@ mod gutter;
 mod gutter_menu;
 mod input;
 mod rows;
+mod scrollbar;
 mod wrap;
 
 use super::find::FindState;
@@ -23,7 +24,8 @@ use crate::theme::Theme;
 use blink::Blink;
 use gpui::{
     canvas, div, font, prelude::*, px, Bounds, ClipboardItem, Context, EventEmitter, FocusHandle,
-    Focusable, Pixels, Render, ScrollStrategy, UniformListScrollHandle, Window,
+    Focusable, MouseButton, MouseMoveEvent, Pixels, Render, ScrollStrategy,
+    UniformListScrollHandle, Window,
 };
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
@@ -68,6 +70,8 @@ pub struct EditorView {
     find_rev: u64,
     /// Caret blink phase; restarts on every move.
     blink: Blink,
+    /// The scrollbar thumb is being dragged.
+    sb_drag: bool,
     /// Where the line-number menu is open, in window coordinates.
     gutter_menu: Option<gpui::Point<gpui::Pixels>>,
     /// Alt+Z or the status-bar item flips this; last choice is in `Settings`.
@@ -143,6 +147,7 @@ impl EditorView {
             find_rev: u64::MAX,
             blink: Blink::new(),
             gutter_menu: None,
+            sb_drag: false,
             wrap,
             wrap_index: None,
             wrap_key: (u64::MAX, 0),
@@ -421,6 +426,10 @@ impl Render for EditorView {
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::key_down))
             .on_scroll_wheel(cx.listener(Self::scroll_wheel))
+            .on_mouse_move(
+                cx.listener(|this, e: &MouseMoveEvent, _, cx| this.scrollbar_drag(e, cx)),
+            )
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::scrollbar_release))
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))
             .on_action(cx.listener(Self::move_up))
@@ -473,6 +482,7 @@ impl Render for EditorView {
                     .size_full(),
             )
             .children(self.find_bar(&theme, cx))
+            .children(self.scrollbar_view(&theme, cx))
             .children(self.gutter_menu_view(&theme, cx))
     }
 }
