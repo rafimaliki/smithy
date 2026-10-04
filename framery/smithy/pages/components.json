@@ -3,7 +3,8 @@
   "title": "Components",
   "items": [
     {"type":"frame","id":"lib-header-tail","src":"components/lib-header-tail.html","device":"custom","w":720,"h":160,"x":0,"y":0,"title":"Header tail","description":"Component header-tail: the right end of the header row (the tab row). A divider, the title actions Toggle sidebar and Open folder, a divider, then the window buttons minimize, maximize and close. Used by every workbench frame, so a change here updates all of them. Matches src/workspace/header.rs."},
-    {"type":"frame","id":"lib-window-controls","src":"components/lib-window-controls.html","device":"custom","w":720,"h":160,"x":800,"y":0,"title":"Window controls","description":"Component window-controls: the window buttons alone. Used where there are no tabs or title actions, the launch screen header."}
+    {"type":"frame","id":"lib-window-controls","src":"components/lib-window-controls.html","device":"custom","w":720,"h":160,"x":800,"y":0,"title":"Window controls","description":"Component window-controls: the window buttons alone. Used where there are no tabs or title actions, the launch screen header."},
+    {"type":"frame","id":"lib-editor-scrollbar","src":"components/lib-editor-scrollbar.html","device":"custom","w":720,"h":300,"x":1600,"y":0,"title":"Editor scrollbar","description":"Component editor-scrollbar: the editor's vertical scrollbar, a 10 px track at the right edge with a rounded thumb sized to the visible share of the file. Click the track or drag the thumb; hidden when the file fits. Used by every frame that shows an editor. Matches src/editor/view/scrollbar.rs."}
   ],
   "arrows": [
 
