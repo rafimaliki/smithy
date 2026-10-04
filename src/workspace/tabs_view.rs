@@ -241,7 +241,7 @@ impl Workspace {
         bar = bar.child(tabs);
         bar = bar.child(super::header::drag_area());
         if !self.is_split() || right {
-            bar = bar.child(self.header_tail(t, cx));
+            bar = bar.child(self.header_tail(t));
         }
         // Accept a tab dragged from the other group; only relevant while split.
         if self.is_split() {

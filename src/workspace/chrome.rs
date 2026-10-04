@@ -104,19 +104,26 @@ impl Workspace {
                 rail = rail.child(button);
             }
         }
-        rail.child(div().flex_1()).child(
-            rail_button(
-                "rail-settings",
-                "icons/rail-settings.svg",
-                self.show_settings,
-                t,
+        // Open folder sits above Settings at the bottom of the rail.
+        rail.child(div().flex_1())
+            .child(
+                rail_button("rail-open", "icons/rail-open.svg", false, t).on_click(
+                    cx.listener(|this, _, window, cx| this.prompt_open_folder(window, cx)),
+                ),
             )
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.show_settings = !this.show_settings;
-                this.capture = None;
-                cx.notify();
-            })),
-        )
+            .child(
+                rail_button(
+                    "rail-settings",
+                    "icons/rail-settings.svg",
+                    self.show_settings,
+                    t,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.show_settings = !this.show_settings;
+                    this.capture = None;
+                    cx.notify();
+                })),
+            )
     }
 
     pub(super) fn status_bar(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {

@@ -6,10 +6,10 @@
       "file": "library/header-tail.html",
       "props": []
     },
-    "window-controls": {
-      "title": "Window controls",
+    "rail-open": {
+      "title": "Rail: open folder",
       "description": "",
-      "file": "library/window-controls.html",
+      "file": "library/rail-open.html",
       "props": []
     }
   }
