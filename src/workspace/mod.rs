@@ -124,8 +124,15 @@ impl Workspace {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let handle = cx.entity();
         let capture_sub = cx.intercept_keystrokes(move |e, _window, cx| {
-            let active = handle.read_with(cx, |this, _| this.capture.is_some());
-            if !active {
+            let (capturing, settings_open) =
+                handle.read_with(cx, |this, _| (this.capture.is_some(), this.show_settings));
+            if !capturing {
+                // Esc closes the Settings modal.
+                if settings_open && e.keystroke.key == "escape" && !e.keystroke.modifiers.modified()
+                {
+                    handle.update(cx, |this, cx| this.close_settings(cx));
+                    cx.stop_propagation();
+                }
                 return;
             }
             let consumed = handle.update(cx, |this, cx| this.on_captured_key(&e.keystroke, cx));

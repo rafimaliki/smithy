@@ -95,7 +95,7 @@ impl Workspace {
         let simple_icons = cx.global::<crate::settings::Settings>().file_icons != "brand";
         let pinned_count = set.tabs.iter().filter(|t| t.pinned).count();
         for (i, tab) in set.tabs.iter().enumerate() {
-            let active = i == set.active && !self.show_settings;
+            let active = i == set.active;
             let dirty = self.is_dirty_in(right, i, cx);
             let pinned = tab.pinned;
             let name = Self::tab_label(set, i);
