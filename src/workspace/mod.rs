@@ -83,6 +83,7 @@ pub struct Workspace {
     /// Raw sidebar width while the divider is being dragged.
     pub(crate) drag: Option<f32>,
     pub(crate) show_settings: bool,
+    tab_scroll: tabs_view::TabScroll,
     /// The status-bar language picker is open.
     pub(crate) lang_menu: bool,
     /// Which settings section the pane shows.
@@ -145,6 +146,7 @@ impl Workspace {
             sidebar_visible: true,
             drag: None,
             show_settings: false,
+            tab_scroll: Default::default(),
             lang_menu: false,
             settings_section: SettingsSection::Appearance,
             github_settings: None,
