@@ -1,0 +1,16 @@
+{
+  "components": {
+    "header-tail": {
+      "title": "Header tail",
+      "description": "",
+      "file": "library/header-tail.html",
+      "props": []
+    },
+    "window-controls": {
+      "title": "Window controls",
+      "description": "",
+      "file": "library/window-controls.html",
+      "props": []
+    }
+  }
+}
