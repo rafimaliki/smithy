@@ -92,6 +92,7 @@ impl Workspace {
             .h_full()
             .overflow_x_scroll()
             .track_scroll(&handle);
+        let simple_icons = cx.global::<crate::settings::Settings>().file_icons != "brand";
         let pinned_count = set.tabs.iter().filter(|t| t.pinned).count();
         for (i, tab) in set.tabs.iter().enumerate() {
             let active = i == set.active && !self.show_settings;
@@ -175,6 +176,15 @@ impl Workspace {
                         cx.notify();
                     }),
                 );
+            // The file's icon, brand or simple as in the tree. An add-on tab has no
+            // file on disk, so its icon follows its label.
+            let icon_path = if tab.path.starts_with("<addon>") {
+                PathBuf::from(name.to_string())
+            } else {
+                tab.path.clone()
+            };
+            let icon = crate::tree::view::icon(t, simple_icons, &icon_path, false);
+            item = item.child(icon);
             if pinned {
                 item = item.child(pin_mark(t)).child(name.clone());
             } else {
