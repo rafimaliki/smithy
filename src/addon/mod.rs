@@ -211,6 +211,16 @@ pub trait AddonInstance {
 }
 
 /// Every add-on Smithy ships. One line per add-on.
+/// Repaint the workspace from an add-on view. The add-on is often called from inside
+/// a workspace update (a navigation event, a click handler), and updating the
+/// workspace again from there panics, so the repaint runs after the current update.
+pub fn notify_workspace(workspace: &WeakEntity<Workspace>, cx: &mut App) {
+    let workspace = workspace.clone();
+    cx.defer(move |cx| {
+        workspace.update(cx, |_, cx| cx.notify()).ok();
+    });
+}
+
 pub fn all() -> Vec<Box<dyn Addon>> {
     vec![
         Box::new(image_viewer::ImageViewer),

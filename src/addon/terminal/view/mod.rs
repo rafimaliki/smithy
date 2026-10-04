@@ -173,7 +173,7 @@ impl TerminalView {
     /// so it has to repaint when the panel hides itself.
     fn notify_workspace(&self, cx: &mut Context<Self>) {
         if let Some(workspace) = self.workspace.clone() {
-            workspace.update(cx, |_, cx| cx.notify()).ok();
+            crate::addon::notify_workspace(&workspace, cx);
         }
     }
 

@@ -67,7 +67,7 @@ impl LspView {
     fn changed(&self, cx: &mut Context<Self>) {
         cx.notify();
         if let Some(workspace) = self.workspace.clone() {
-            workspace.update(cx, |_, cx| cx.notify()).ok();
+            crate::addon::notify_workspace(&workspace, cx);
         }
     }
 

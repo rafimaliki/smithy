@@ -148,7 +148,7 @@ impl ChangesView {
 
     fn notify_workspace(&self, cx: &mut Context<Self>) {
         if let Some(ws) = self.workspace.clone() {
-            ws.update(cx, |_, cx| cx.notify()).ok();
+            crate::addon::notify_workspace(&ws, cx);
         }
     }
 
