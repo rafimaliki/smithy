@@ -154,6 +154,15 @@ impl Workspace {
                 if s.read_only {
                     right = right.child(div().ml(px(18.)).child("Read-only"));
                 }
+                // Error highlighting add-on: syntax error count of the open file.
+                if let Some(n) = e.read(cx).error_count() {
+                    let (text, color) = match n {
+                        0 => ("No errors".to_string(), t.mute),
+                        1 => ("1 error".to_string(), t.del),
+                        n => (format!("{n} errors"), t.del),
+                    };
+                    right = right.child(div().ml(px(18.)).text_color(color).child(text));
+                }
             }
             right = right
                 .child(div().ml(px(18.)).child(self.status_language(t, cx)))

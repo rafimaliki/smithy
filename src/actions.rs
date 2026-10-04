@@ -30,6 +30,9 @@ actions!(
         Save,
         Find,
         ToggleBlame,
+        // Move to the next or previous syntax error (Error highlighting add-on).
+        NextError,
+        PrevError,
         ToggleWrap,
         // Answered by the Language servers add-on; they do nothing while it is off.
         GoToDefinition,
