@@ -5,6 +5,7 @@
 mod blink;
 mod find_bar;
 mod gutter;
+mod gutter_menu;
 mod input;
 mod rows;
 mod wrap;
@@ -67,6 +68,8 @@ pub struct EditorView {
     find_rev: u64,
     /// Caret blink phase; restarts on every move.
     blink: Blink,
+    /// Where the line-number menu is open, in window coordinates.
+    gutter_menu: Option<gpui::Point<gpui::Pixels>>,
     /// Alt+Z or the status-bar item flips this; last choice is in `Settings`.
     wrap: bool,
     /// Rows for the buffer at the current width; `None` when wrap is off.
@@ -139,6 +142,7 @@ impl EditorView {
             find: None,
             find_rev: u64::MAX,
             blink: Blink::new(),
+            gutter_menu: None,
             wrap,
             wrap_index: None,
             wrap_key: (u64::MAX, 0),
@@ -469,5 +473,6 @@ impl Render for EditorView {
                     .size_full(),
             )
             .children(self.find_bar(&theme, cx))
+            .children(self.gutter_menu_view(&theme, cx))
     }
 }

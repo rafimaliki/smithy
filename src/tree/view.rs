@@ -134,6 +134,9 @@ impl TreeView {
             .track_focus(&self.ren_focus)
             .key_context("Rename")
             .on_key_down(cx.listener(Self::rename_key))
+            // A click anywhere else cancels: the old name stays, and an entry that
+            // New file / New folder just made is removed.
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| this.cancel_rename(cx)))
             .flex()
             .items_center()
             .h(px(20.))
@@ -223,6 +226,8 @@ impl TreeView {
                     .on_mouse_down(
                         MouseButton::Right,
                         cx.listener(move |this, e: &MouseDownEvent, window, cx| {
+                            // The tree's own right-click (root menu) is for empty space.
+                            cx.stop_propagation();
                             window.focus(&this.focus);
                             this.selected = Some(right_path.clone());
                             this.menu = Some(Menu {
@@ -355,6 +360,19 @@ impl Render for TreeView {
             .key_context("Tree")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::tree_key))
+            // Right-click on empty space: the menu for the opened folder itself.
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                    window.focus(&this.focus);
+                    this.menu = Some(Menu {
+                        path: this.tree.root.clone(),
+                        is_dir: true,
+                        at: e.position,
+                    });
+                    cx.notify();
+                }),
+            )
             .child(
                 gpui::uniform_list("tree", count, cx.processor(Self::rows))
                     .track_scroll(self.scroll.clone())

@@ -120,7 +120,8 @@ impl Workspace {
     }
 
     pub(super) fn status_bar(&self, t: &Theme, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut right = div().ml_auto().flex().gap(px(18.));
+        // `gap` is not applied between these children, so each item carries its own margin.
+        let mut right = div().ml_auto().flex();
         if let Some(tab) = self.focused().active_tab() {
             if let TabContent::Editor(e, _) = &tab.content {
                 let wraps = e.read(cx).wraps();
@@ -128,6 +129,7 @@ impl Workspace {
                 right = right.child(
                     div()
                         .id("status-wrap")
+                        .ml(px(18.))
                         .cursor_pointer()
                         .text_color(t.mute)
                         .hover(|d| d.text_color(t.ink))
@@ -144,12 +146,18 @@ impl Workspace {
                 );
                 let s = &e.read(cx).state;
                 let (l, c) = s.line_col(s.cursor);
-                right = right.child(format!("Ln {}, Col {}", l + 1, c + 1));
+                right = right.child(div().ml(px(18.)).child(format!(
+                    "Ln {}, Col {}",
+                    l + 1,
+                    c + 1
+                )));
                 if s.read_only {
-                    right = right.child("Read-only");
+                    right = right.child(div().ml(px(18.)).child("Read-only"));
                 }
             }
-            right = right.child(self.status_language(t, cx)).child("UTF-8");
+            right = right
+                .child(div().ml(px(18.)).child(self.status_language(t, cx)))
+                .child(div().ml(px(18.)).child("UTF-8"));
         }
         let folder = self
             .folder
@@ -169,20 +177,26 @@ impl Workspace {
             .border_color(t.line)
             .text_size(px(12.))
             .text_color(t.mute)
-            .child(div().text_color(t.ink).child(SharedString::from(folder)));
+            .child(
+                div()
+                    .mr(px(18.))
+                    .text_color(t.ink)
+                    .child(SharedString::from(folder)),
+            );
         for (_, inst) in self.registry.running() {
             let Some(status) = inst.status(cx) else {
                 continue;
             };
             bar = bar.child(
                 div()
+                    .mr(px(18.))
                     .flex()
                     .gap(px(5.))
                     .text_color(t.ink)
                     .child(SharedString::from(status.branch)),
             );
             if !status.detail.is_empty() {
-                bar = bar.child(SharedString::from(status.detail));
+                bar = bar.child(div().mr(px(18.)).child(SharedString::from(status.detail)));
             }
         }
         bar.when_some(self.error.clone(), |d, e| {
