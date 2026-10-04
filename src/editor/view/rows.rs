@@ -96,6 +96,16 @@ impl EditorView {
                         div()
                             .w(px(GUTTER))
                             .flex_none()
+                            // Right-click a line number for the line menu.
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                                    if this.has_line_menu() {
+                                        this.gutter_menu = Some(e.position);
+                                        cx.notify();
+                                    }
+                                }),
+                            )
                             .pr(px(18.))
                             .text_right()
                             .text_color(theme.mute)
